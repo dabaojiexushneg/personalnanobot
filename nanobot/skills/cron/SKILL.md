@@ -1,57 +1,62 @@
 ---
 name: cron
-description: Schedule reminders and recurring tasks.
+description: 创建提醒、一次性计划任务和循环任务。适用于用户要求稍后提醒、周期性执行、定时检查或定时报告的场景。
 ---
 
 # Cron
 
-Use the `cron` tool to schedule reminders or recurring tasks.
+使用 `cron` 工具创建提醒或定时任务。
 
-## Three Modes
+## 三种模式
 
-1. **Reminder** - message is sent directly to user
-2. **Task** - message is a task description, agent executes and sends result
-3. **One-time** - runs once at a specific time, then auto-deletes
+1. **提醒**：到点后直接给用户发送消息。
+2. **任务**：消息内容是任务描述，到点后由 agent 执行并返回结果。
+3. **一次性任务**：在指定时间运行一次，完成后自动删除。
 
-## Examples
+## 示例
 
-Fixed reminder:
-```
-cron(action="add", message="Time to take a break!", every_seconds=1200)
-```
+固定提醒：
 
-Dynamic task (agent executes each time):
-```
-cron(action="add", message="Check HKUDS/nanobot GitHub stars and report", every_seconds=600)
+```text
+cron(action="add", message="该休息一下了！", every_seconds=1200)
 ```
 
-One-time scheduled task (compute ISO datetime from current time):
-```
-cron(action="add", message="Remind me about the meeting", at="<ISO datetime>")
+动态任务，每次触发时由 agent 执行：
+
+```text
+cron(action="add", message="检查 HKUDS/nanobot 的 GitHub stars 并报告", every_seconds=600)
 ```
 
-Timezone-aware cron:
-```
-cron(action="add", message="Morning standup", cron_expr="0 9 * * 1-5", tz="America/Vancouver")
+一次性计划任务，需要基于当前时间计算 ISO datetime：
+
+```text
+cron(action="add", message="提醒我参加会议", at="<ISO datetime>")
 ```
 
-List/remove:
+带时区的 Cron：
+
+```text
+cron(action="add", message="早会提醒", cron_expr="0 9 * * 1-5", tz="America/Vancouver")
 ```
+
+列出和删除任务：
+
+```text
 cron(action="list")
 cron(action="remove", job_id="abc123")
 ```
 
-## Time Expressions
+## 时间表达式换算
 
-| User says | Parameters |
-|-----------|------------|
-| every 20 minutes | every_seconds: 1200 |
-| every hour | every_seconds: 3600 |
-| every day at 8am | cron_expr: "0 8 * * *" |
-| weekdays at 5pm | cron_expr: "0 17 * * 1-5" |
-| 9am Vancouver time daily | cron_expr: "0 9 * * *", tz: "America/Vancouver" |
-| at a specific time | at: ISO datetime string (compute from current time) |
+| 用户说法 | 参数 |
+| --- | --- |
+| 每 20 分钟 | `every_seconds: 1200` |
+| 每小时 | `every_seconds: 3600` |
+| 每天早上 8 点 | `cron_expr: "0 8 * * *"` |
+| 工作日下午 5 点 | `cron_expr: "0 17 * * 1-5"` |
+| 温哥华时间每天早上 9 点 | `cron_expr: "0 9 * * *", tz: "America/Vancouver"` |
+| 指定某个时间 | `at: ISO datetime string`，需要根据当前时间计算 |
 
-## Timezone
+## 时区
 
-Use `tz` with `cron_expr` to schedule in a specific IANA timezone. Without `tz`, the server's local timezone is used.
+使用 `cron_expr` 时，可以通过 `tz` 指定 IANA 时区。不指定 `tz` 时，默认使用服务器本地时区。

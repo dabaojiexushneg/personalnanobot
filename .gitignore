@@ -81,6 +81,16 @@ nano.*.save
 # Logs & temp
 *.log
 logs/
+.logs/
 tmp/
 temp/
 *.tmp
+.runtime/
+.tmp*/
+.tmp-*/
+
+# Frontend dependencies
+node_modules/
+
+# Local secrets
+admin-recovery-password.txt

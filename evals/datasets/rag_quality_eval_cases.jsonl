@@ -1,0 +1,3 @@
+{"id":"rag_broadband_fee","assistant_id":"consult","query":"家庭宽带每月哪天扣费，超过多少钱要提醒我？","expect_contains":["宽带","扣费","提醒"],"expect_title_contains":"个人生活账号助手演示知识库","min_evidence":1}
+{"id":"rag_subscription_renewal","assistant_id":"consult","query":"根据知识库告诉我会员续费应该提前多久提醒？","expect_contains":["会员","续费","提醒"],"expect_title_contains":"个人生活账号助手演示知识库","min_evidence":1}
+{"id":"rag_account_priority","assistant_id":"consult","query":"账号整理时应该按什么优先级处理？","expect_contains":["账号整理","安全风险","即将到期"],"expect_title_contains":"个人生活账号助手演示知识库","min_evidence":1}

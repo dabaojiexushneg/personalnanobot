@@ -112,6 +112,20 @@ def _has_downloadable_media_locator(media: dict[str, Any] | None) -> bool:
     return bool(str(media.get("encrypt_query_param", "") or "") or str(media.get("full_url", "") or "").strip())
 
 
+def _file_item_name(file_item: dict[str, Any]) -> str:
+    """Normalize file names across WeChat payload variants."""
+    if not isinstance(file_item, dict):
+        return "unknown"
+    # 微信不同消息类型的文件名字段不一致，统一归一化后才能保留原始扩展名。
+    return str(
+        file_item.get("file_name")
+        or file_item.get("fileName")
+        or file_item.get("name")
+        or file_item.get("filename")
+        or "unknown"
+    )
+
+
 class WeixinConfig(Base):
     """Personal WeChat channel configuration."""
 
@@ -157,6 +171,7 @@ class WeixinChannel(BaseChannel):
         self._poll_task: asyncio.Task | None = None
         self._next_poll_timeout_s: int = DEFAULT_LONG_POLL_TIMEOUT_S
         self._session_pause_until: float = 0.0
+        self._cursor_reset_attempted: bool = False
         self._typing_tasks: dict[str, asyncio.Task] = {}
         self._typing_tickets: dict[str, dict[str, Any]] = {}
 
@@ -222,6 +237,41 @@ class WeixinChannel(BaseChannel):
             state_file.write_text(json.dumps(data, ensure_ascii=False))
         except Exception:
             pass
+
+    def _reset_update_cursor(self) -> None:
+        """Clear stale long-poll cursor so the next getupdates starts fresh."""
+        self._get_updates_buf = ""
+        self._next_poll_timeout_s = self.config.poll_timeout
+        self._save_state()
+
+    async def _recover_session_expired(self) -> None:
+        """Self-heal WeChat session expiry before giving up.
+
+        In practice ``errcode = -14`` often means the persisted update cursor
+        is no longer valid after a restart. We first clear the cursor and retry.
+        If that still fails, fall back to re-authentication for state-file-based
+        sessions. Explicitly configured tokens are treated as operator-managed.
+        """
+        if self._get_updates_buf and not self._cursor_reset_attempted:
+            self._cursor_reset_attempted = True
+            logger.warning(
+                "WeChat update cursor expired. Clearing saved get_updates_buf and retrying."
+            )
+            self._reset_update_cursor()
+            return
+
+        if self.config.token:
+            raise RuntimeError(
+                f"WeChat configured token/session expired (errcode {ERRCODE_SESSION_EXPIRED}). "
+                "Please refresh the configured token."
+            )
+
+        logger.warning("WeChat session expired again. Starting QR re-login flow.")
+        self._token = ""
+        self._reset_update_cursor()
+        if not await self._qr_login():
+            raise RuntimeError("WeChat re-login failed after session expiration")
+        self._cursor_reset_attempted = False
 
     # ------------------------------------------------------------------
     # HTTP helpers  (matches api.ts buildHeaders / apiFetch)
@@ -419,15 +469,17 @@ class WeixinChannel(BaseChannel):
 
     @staticmethod
     def _print_qr_code(url: str) -> None:
+        logger.warning("WeChat login required. Scan the QR code below with WeChat to bring the channel online.")
         try:
             import qrcode as qr_lib
 
+            print("\n[WeChat Login] Scan the QR code below with WeChat.\n")
             qr = qr_lib.QRCode(border=1)
             qr.add_data(url)
             qr.make(fit=True)
             qr.print_ascii(invert=True)
         except ImportError:
-            print(f"\nLogin URL: {url}\n")
+            print(f"\n[WeChat Login] Open this URL and scan with WeChat:\n{url}\n")
 
     # ------------------------------------------------------------------
     # Channel lifecycle
@@ -550,17 +602,19 @@ class WeixinChannel(BaseChannel):
 
         if is_error:
             if errcode == ERRCODE_SESSION_EXPIRED or ret == ERRCODE_SESSION_EXPIRED:
-                self._pause_session()
-                remaining = self._session_pause_remaining_s()
-                logger.warning(
-                    "WeChat session expired (errcode {}). Pausing {} min.",
-                    errcode,
-                    max((remaining + 59) // 60, 1),
-                )
+                try:
+                    await self._recover_session_expired()
+                except Exception as exc:
+                    logger.warning(
+                        "WeChat session recovery failed after expiration: {}", exc
+                    )
+                self._pause_session(RETRY_DELAY_S)
                 return
             raise RuntimeError(
                 f"getUpdates failed: ret={ret} errcode={errcode} errmsg={data.get('errmsg', '')}"
             )
+
+        self._cursor_reset_attempted = False
 
         # Honour server-suggested poll timeout (monitor.ts:102-105)
         server_timeout_ms = data.get("longpolling_timeout_ms")
@@ -616,6 +670,7 @@ class WeixinChannel(BaseChannel):
         content_parts: list[str] = []
         media_paths: list[str] = []
         has_top_level_downloadable_media = False
+        has_text_instruction = False
 
         for item in item_list:
             item_type = item.get("type", 0)
@@ -623,6 +678,7 @@ class WeixinChannel(BaseChannel):
             if item_type == ITEM_TEXT:
                 text = (item.get("text_item") or {}).get("text", "")
                 if text:
+                    has_text_instruction = True
                     # Handle quoted/ref messages (inbound.ts:86-98)
                     ref = item.get("ref_msg")
                     if ref:
@@ -666,6 +722,7 @@ class WeixinChannel(BaseChannel):
                 # Voice-to-text provided by WeChat (inbound.ts:101-103)
                 voice_text = voice_item.get("text", "")
                 if voice_text:
+                    has_text_instruction = True
                     content_parts.append(f"[voice] {voice_text}")
                 else:
                     if _has_downloadable_media_locator(voice_item.get("media")):
@@ -674,6 +731,7 @@ class WeixinChannel(BaseChannel):
                     if file_path:
                         transcription = await self.transcribe_audio(file_path)
                         if transcription:
+                            has_text_instruction = True
                             content_parts.append(f"[voice] {transcription}")
                         else:
                             content_parts.append(f"[voice]\n[Audio: source: {file_path}]")
@@ -685,7 +743,7 @@ class WeixinChannel(BaseChannel):
                 file_item = item.get("file_item") or {}
                 if _has_downloadable_media_locator(file_item.get("media")):
                     has_top_level_downloadable_media = True
-                file_name = file_item.get("file_name", "unknown")
+                file_name = _file_item_name(file_item)
                 file_path = await self._download_media_item(
                     file_item,
                     "file",
@@ -736,13 +794,14 @@ class WeixinChannel(BaseChannel):
                     if file_path:
                         transcription = await self.transcribe_audio(file_path)
                         if transcription:
+                            has_text_instruction = True
                             content_parts.append(f"[voice] {transcription}")
                         else:
                             content_parts.append(f"[voice]\n[Audio: source: {file_path}]")
                         media_paths.append(file_path)
                 elif ref_type == ITEM_FILE:
                     file_item = ref_media_item.get("file_item") or {}
-                    file_name = file_item.get("file_name", "unknown")
+                    file_name = _file_item_name(file_item)
                     file_path = await self._download_media_item(file_item, "file", file_name)
                     if file_path:
                         content_parts.append(f"[file: {file_name}]\n[File: source: {file_path}]")
@@ -765,7 +824,8 @@ class WeixinChannel(BaseChannel):
             len(content),
         )
 
-        await self._start_typing(from_user_id, ctx_token)
+        if has_text_instruction or not media_paths:
+            await self._start_typing(from_user_id, ctx_token)
 
         await self._handle_message(
             sender_id=from_user_id,
@@ -808,9 +868,13 @@ class WeixinChannel(BaseChannel):
             elif media_aes_key_b64:
                 aes_key_b64 = media_aes_key_b64
 
-            # Reference protocol behavior: VOICE/FILE/VIDEO require aes_key;
-            # only IMAGE may be downloaded as plain bytes when key is missing.
-            if media_type != "image" and not aes_key_b64:
+            # encrypt_query_param returns encrypted CDN bytes and needs aes_key.
+            # Some WeChat payloads also include a direct full_url for files/images;
+            # when aes_key is absent we can still save that direct response as a
+            # plain binary attachment so pending-media copy-to-desktop works.
+            if media_type != "image" and not aes_key_b64 and not (
+                media_type in {"file", "video"} and full_url
+            ):
                 return None
 
             assert self._client is not None
@@ -941,12 +1005,12 @@ class WeixinChannel(BaseChannel):
 
     async def send(self, msg: OutboundMessage) -> None:
         if not self._client or not self._token:
-            logger.warning("WeChat client not initialized or not authenticated")
-            return
+            raise RuntimeError("WeChat client not initialized or not authenticated")
         try:
             self._assert_session_active()
         except RuntimeError:
-            return
+            logger.warning("WeChat send blocked while session is paused for {}", msg.chat_id)
+            raise
 
         is_progress = bool((msg.metadata or {}).get("_progress", False))
         if not is_progress:
@@ -955,11 +1019,10 @@ class WeixinChannel(BaseChannel):
         content = msg.content.strip()
         ctx_token = self._context_tokens.get(msg.chat_id, "")
         if not ctx_token:
-            logger.warning(
-                "WeChat: no context_token for chat_id={}, cannot send",
-                msg.chat_id,
+            raise RuntimeError(
+                f"WeChat target {msg.chat_id} has no active context token. "
+                "请先从微信给机器人发送一条消息，刷新可回复会话后再同步发送。"
             )
-            return
 
         typing_ticket = ""
         try:

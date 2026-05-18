@@ -1,0 +1,10 @@
+services:
+  nanobot-gateway:
+    restart: unless-stopped
+
+  nanobot-api:
+    restart: unless-stopped
+
+  nanobot-cli:
+    profiles:
+      - cli

@@ -11,6 +11,7 @@ import httpx
 import nanobot.channels.weixin as weixin_mod
 from nanobot.bus.queue import MessageBus
 from nanobot.channels.weixin import (
+    ITEM_FILE,
     ITEM_IMAGE,
     ITEM_TEXT,
     MESSAGE_TYPE_BOT,
@@ -156,6 +157,7 @@ async def test_process_message_persists_context_token_to_state_file(tmp_path) ->
 async def test_process_message_extracts_media_and_preserves_paths() -> None:
     channel, bus = _make_channel()
     channel._download_media_item = AsyncMock(return_value="/tmp/test.jpg")
+    channel._start_typing = AsyncMock()
 
     await channel._process_message(
         {
@@ -174,6 +176,64 @@ async def test_process_message_extracts_media_and_preserves_paths() -> None:
     assert "[image]" in inbound.content
     assert "/tmp/test.jpg" in inbound.content
     assert inbound.media == ["/tmp/test.jpg"]
+    channel._start_typing.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_file_message_defers_typing_and_preserves_arbitrary_path() -> None:
+    channel, bus = _make_channel()
+    channel._download_media_item = AsyncMock(return_value=r"D:\agent\nanobot\.runtime\media\weixin\demo.7z")
+    channel._start_typing = AsyncMock()
+
+    await channel._process_message(
+        {
+            "message_type": 1,
+            "message_id": "m3-file",
+            "from_user_id": "wx-user",
+            "context_token": "ctx-file",
+            "item_list": [
+                {
+                    "type": ITEM_FILE,
+                    "file_item": {
+                        "fileName": "演示压缩包.7z",
+                        "media": {"encrypt_query_param": "file-enc", "aes_key": "key"},
+                    },
+                },
+            ],
+        }
+    )
+
+    inbound = await asyncio.wait_for(bus.consume_inbound(), timeout=1.0)
+
+    channel._download_media_item.assert_awaited_once()
+    channel._start_typing.assert_not_awaited()
+    assert "[file: 演示压缩包.7z]" in inbound.content
+    assert r"D:\agent\nanobot\.runtime\media\weixin\demo.7z" in inbound.content
+    assert inbound.media == [r"D:\agent\nanobot\.runtime\media\weixin\demo.7z"]
+
+
+@pytest.mark.asyncio
+async def test_download_file_with_plain_full_url_without_aes_key(tmp_path, monkeypatch) -> None:
+    channel, _bus = _make_channel()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://cdn.example.com/demo.docx"
+        return httpx.Response(200, content=b"plain-docx")
+
+    channel._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr("nanobot.channels.weixin.get_media_dir", lambda channel_name="": tmp_path)
+
+    try:
+        file_path = await channel._download_media_item(
+            {"media": {"full_url": "https://cdn.example.com/demo.docx"}},
+            "file",
+            "demo.docx",
+        )
+    finally:
+        await channel._client.aclose()
+
+    assert file_path == str(tmp_path / "demo.docx")
+    assert (tmp_path / "demo.docx").read_bytes() == b"plain-docx"
 
 
 @pytest.mark.asyncio

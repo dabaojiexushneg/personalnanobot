@@ -1,0 +1,74 @@
+{
+  "title": "面试展示包",
+  "subtitle": "把系统能力、演示顺序、评测结果和架构取舍收在一个面板里，方便现场讲解。",
+  "demo_steps": [
+    {
+      "title": "1. 启动与登录",
+      "detail": "运行 start-all.ps1，展示 Web 控制台、鉴权和多入口启动链路。"
+    },
+    {
+      "title": "2. Milvus RAG",
+      "detail": "上传知识文档，提问后展示回答引用与 Trace 中的 knowledge_hit 证据。"
+    },
+    {
+      "title": "3. 多模型分工",
+      "detail": "让 consult 助手先判断请求类型，普通文本走 qwen3.5-plus，生图请求切到 Doubao-Seedream-4.0。"
+    },
+    {
+      "title": "4. Trace 与 Token",
+      "detail": "展示输入、输出、工具调用、token 使用量和耗时，强调可观测性。"
+    },
+    {
+      "title": "5. 任务中心",
+      "detail": "演示 cron + 条件流；若被阻塞，展示最近一次阻塞原因。"
+    }
+  ],
+  "eval_report": {
+    "dataset": "basic_eval_cases.jsonl",
+    "generated_at": "2026-04-23T11:30:00+08:00",
+    "passed": 4,
+    "total": 4,
+    "pass_rate": 100.0,
+    "metrics": [
+      {
+        "label": "普通问答稳定性",
+        "value": "PASS"
+      },
+      {
+        "label": "Milvus RAG 问答",
+        "value": "PASS"
+      },
+      {
+        "label": "图片生成意图识别",
+        "value": "PASS"
+      },
+      {
+        "label": "开发类模板输出",
+        "value": "PASS"
+      }
+    ]
+  },
+  "docs": [
+    {
+      "label": "演示脚本",
+      "path": "docs/interview/DEMO_SCRIPT.md"
+    },
+    {
+      "label": "系统设计答辩",
+      "path": "docs/interview/SYSTEM_DESIGN.md"
+    },
+    {
+      "label": "部署故事",
+      "path": "docs/interview/DEPLOYMENT_STORY.md"
+    },
+    {
+      "label": "已知问题与取舍",
+      "path": "docs/interview/KNOWN_ISSUES.md"
+    }
+  ],
+  "tradeoffs": [
+    "控制面仍使用 SQLite，适合本地开发与单机控制面。",
+    "任务中心已支持 cron 和条件流，但还不是完整工作流引擎。",
+    "渠道同步发送仍依赖已有会话目标，后续可增加显式目标账号输入。"
+  ]
+}

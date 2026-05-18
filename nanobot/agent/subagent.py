@@ -12,7 +12,8 @@ from nanobot.agent.hook import AgentHook, AgentHookContext
 from nanobot.utils.prompt_templates import render_template
 from nanobot.agent.runner import AgentRunSpec, AgentRunner
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
-from nanobot.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from nanobot.agent.tools.filesystem import CopyFileTool, EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from nanobot.agent.tools.local_paths import get_user_file_roots
 from nanobot.agent.tools.registry import ToolRegistry
 from nanobot.agent.tools.search import GlobTool, GrepTool
 from nanobot.agent.tools.shell import ExecTool
@@ -115,13 +116,16 @@ class SubagentManager:
             # Build subagent tools (no message tool, no spawn tool)
             tools = ToolRegistry()
             allowed_dir = self.workspace if (self.restrict_to_workspace or self.exec_config.sandbox) else None
-            extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
+            extra_user_dirs = get_user_file_roots() if allowed_dir else []
+            extra_read = ([BUILTIN_SKILLS_DIR] + extra_user_dirs) if allowed_dir else None
+            extra_write = extra_user_dirs if allowed_dir else None
             tools.register(ReadFileTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read))
-            tools.register(WriteFileTool(workspace=self.workspace, allowed_dir=allowed_dir))
-            tools.register(EditFileTool(workspace=self.workspace, allowed_dir=allowed_dir))
-            tools.register(ListDirTool(workspace=self.workspace, allowed_dir=allowed_dir))
-            tools.register(GlobTool(workspace=self.workspace, allowed_dir=allowed_dir))
-            tools.register(GrepTool(workspace=self.workspace, allowed_dir=allowed_dir))
+            tools.register(WriteFileTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_write))
+            tools.register(EditFileTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_write))
+            tools.register(CopyFileTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_write))
+            tools.register(ListDirTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_write))
+            tools.register(GlobTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_write))
+            tools.register(GrepTool(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_write))
             if self.exec_config.enable:
                 tools.register(ExecTool(
                     working_dir=str(self.workspace),
@@ -129,6 +133,7 @@ class SubagentManager:
                     restrict_to_workspace=self.restrict_to_workspace,
                     sandbox=self.exec_config.sandbox,
                     path_append=self.exec_config.path_append,
+                    extra_allowed_dirs=extra_write,
                 ))
             if self.web_config.enable:
                 tools.register(WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy))

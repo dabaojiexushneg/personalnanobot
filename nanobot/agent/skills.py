@@ -28,11 +28,18 @@ class SkillsLoader:
     specific tools or perform certain tasks.
     """
 
-    def __init__(self, workspace: Path, builtin_skills_dir: Path | None = None, disabled_skills: set[str] | None = None):
+    def __init__(
+        self,
+        workspace: Path,
+        builtin_skills_dir: Path | None = None,
+        disabled_skills: set[str] | None = None,
+        allowed_skills: set[str] | None = None,
+    ):
         self.workspace = workspace
         self.workspace_skills = workspace / "skills"
         self.builtin_skills = builtin_skills_dir or BUILTIN_SKILLS_DIR
         self.disabled_skills = disabled_skills or set()
+        self.allowed_skills = allowed_skills
 
     def _skill_entries_from_dir(self, base: Path, source: str, *, skip_names: set[str] | None = None) -> list[dict[str, str]]:
         if not base.exists():
@@ -46,6 +53,8 @@ class SkillsLoader:
                 continue
             name = skill_dir.name
             if skip_names is not None and name in skip_names:
+                continue
+            if self.allowed_skills is not None and name not in self.allowed_skills:
                 continue
             entries.append({"name": name, "path": str(skill_file), "source": source})
         return entries
@@ -89,6 +98,8 @@ class SkillsLoader:
             roots.append(self.builtin_skills)
         for root in roots:
             path = root / name / "SKILL.md"
+            if self.allowed_skills is not None and name not in self.allowed_skills:
+                continue
             if path.exists():
                 return path.read_text(encoding="utf-8")
         return None

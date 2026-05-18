@@ -1,5 +1,31 @@
 # Security Policy
 
+## Security Posture
+
+`nanobot` defaults to a production-first posture for the web control plane:
+
+- Web authentication is enabled by default
+- Fixed default administrator passwords are not shipped anymore
+- First startup requires explicit administrator bootstrap
+- Session cookies use `HttpOnly`, `Path=/`, and `SameSite=Strict` by default
+- `Secure` cookies are required outside explicit development mode
+- CSRF protection is enabled for mutating web requests
+
+The only supported way to relax those defaults is to explicitly enable development mode:
+
+```json
+{
+  "cluster": {
+    "web": {
+      "devMode": true,
+      "authEnabled": false
+    }
+  }
+}
+```
+
+Do not use that mode in production.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in nanobot, please report it by:
@@ -15,6 +41,23 @@ If you discover a security vulnerability in nanobot, please report it by:
 We aim to respond to security reports within 48 hours.
 
 ## Security Best Practices
+
+### Password Policy
+
+- Initial administrator bootstrap is mandatory when no users exist
+- Administrator and user passwords should be at least 12 characters long
+- Passwords are stored with `argon2id`
+- Legacy SHA-256 based password hashes are migrated automatically on successful login
+- Avoid shared operator accounts; prefer individual named users
+
+### Session Policy
+
+- Sessions are stored server-side and expire according to `cluster.web.sessionTtlMinutes`
+- Session cookies are `HttpOnly`
+- Default cookie scope is `Path=/`
+- Default cookie policy is `SameSite=Strict`
+- `Secure=true` is expected in production
+- Mutating web requests require a matching CSRF token
 
 ### 1. API Key Management
 
@@ -78,6 +121,16 @@ On Linux, set `"tools.exec.sandbox": "bwrap"` to wrap every shell command in a [
 
 - Workspace directory → **read-write** (agent works normally)
 - Media directory → **read-only** (can read uploaded attachments)
+
+### bubblewrap, Containers, and Privilege
+
+`bubblewrap` typically requires additional kernel capabilities or relaxed container confinement. For that reason:
+
+- The default compose template now runs with minimal privileges
+- High-privilege settings are isolated in `docker-compose.dev.yml`
+- Production deployments should only enable the dev override if `bubblewrap` is strictly required
+
+Use the high-privilege override only when you actually need sandboxed shell execution. If your deployment only needs chat, RAG, Trace, tasks, and the management console, keep the minimal profile.
 - System directories (`/usr`, `/bin`, `/lib`) → **read-only** (commands still work)
 - Config files and API keys (`~/.nanobot/config.json`) → **hidden** (masked by tmpfs)
 

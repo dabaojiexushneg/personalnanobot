@@ -23,7 +23,7 @@ if not QQ_AVAILABLE:
     pytest.skip("QQ dependencies not installed (qq-botpy)", allow_module_level=True)
 
 from nanobot.bus.queue import MessageBus
-from nanobot.channels.qq import QQChannel, QQConfig
+from nanobot.channels.qq import QQChannel, QQConfig, _attachment_info
 
 
 class _FakeApi:
@@ -170,3 +170,19 @@ async def test_custom_ack_message_text() -> None:
 
     msg = await channel.bus.consume_inbound()
     assert msg.content == "test input"
+
+
+def test_attachment_info_supports_botpy_file_variants() -> None:
+    attachment = {
+        "fileInfo": {
+            "downloadUrl": "//multimedia.nt.qq.com/download/demo",
+            "fileName": "演示压缩包.7z",
+            "contentType": "application/x-7z-compressed",
+        }
+    }
+
+    url, filename, content_type = _attachment_info(attachment)
+
+    assert url == "//multimedia.nt.qq.com/download/demo"
+    assert filename == "演示压缩包.7z"
+    assert "7z" in content_type

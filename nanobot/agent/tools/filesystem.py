@@ -2,6 +2,7 @@
 
 import difflib
 import mimetypes
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,26 @@ from nanobot.agent.tools.schema import BooleanSchema, IntegerSchema, StringSchem
 from nanobot.agent.tools import file_state
 from nanobot.utils.helpers import build_image_content_blocks, detect_image_mime
 from nanobot.config.paths import get_media_dir
+from nanobot.agent.tools.local_paths import get_desktop_dir
+
+
+def _normalize_user_destination_path(path: str) -> str:
+    """Map common user-facing desktop aliases to the real Desktop path."""
+
+    raw = str(path or "").strip().strip('"').strip("'")
+    if not raw:
+        return raw
+    normalized = raw.replace("/", "\\").strip("\\")
+    lowered = normalized.lower()
+    desktop_aliases = {"desktop", "桌面", "电脑桌面", "我的桌面"}
+    if lowered in desktop_aliases:
+        return str(get_desktop_dir())
+    for alias in desktop_aliases:
+        prefix = alias + "\\"
+        if lowered.startswith(prefix.lower()):
+            suffix = normalized[len(prefix):].strip("\\")
+            return str(get_desktop_dir() / suffix)
+    return raw
 
 
 def _resolve_path(
@@ -74,11 +95,37 @@ def _is_blocked_device(path: str | Path) -> bool:
     """Check if path is a blocked device that could hang or produce infinite output."""
     import re
     raw = str(path)
+    normalized = raw.replace("\\", "/")
     if raw in _BLOCKED_DEVICE_PATHS:
         return True
-    if re.match(r"/proc/\d+/fd/[012]$", raw) or re.match(r"/proc/self/fd/[012]$", raw):
+    if normalized in _BLOCKED_DEVICE_PATHS:
+        return True
+    if re.match(r"/proc/\d+/fd/[012]$", normalized) or re.match(r"/proc/self/fd/[012]$", normalized):
         return True
     return False
+
+
+def _symlink_targets_blocked(path: str | Path) -> bool:
+    candidate = Path(path)
+    try:
+        if not candidate.is_symlink():
+            return False
+    except OSError:
+        return False
+
+    try:
+        target = candidate.readlink()
+    except OSError:
+        return False
+
+    if _is_blocked_device(target):
+        return True
+
+    try:
+        normalized = target if target.is_absolute() else (candidate.parent / target)
+    except Exception:
+        return False
+    return _is_blocked_device(normalized)
 
 
 def _parse_page_range(pages: str, total: int) -> tuple[int, int]:
@@ -142,10 +189,14 @@ class ReadFileTool(_FsTool):
             # Device path blacklist
             if _is_blocked_device(path):
                 return f"Error: Reading {path} is blocked (device path that could hang or produce infinite output)."
+            if _symlink_targets_blocked(path):
+                return f"Error: Reading {path} is blocked (symlink targets a device path that could hang or produce infinite output)."
 
             fp = self._resolve(path)
             if _is_blocked_device(fp):
                 return f"Error: Reading {fp} is blocked (device path that could hang or produce infinite output)."
+            if _symlink_targets_blocked(fp):
+                return f"Error: Reading {fp} is blocked (symlink targets a device path that could hang or produce infinite output)."
             if not fp.exists():
                 return f"Error: File not found: {path}"
             if not fp.is_file():
@@ -295,6 +346,77 @@ class WriteFileTool(_FsTool):
             return f"Error: {e}"
         except Exception as e:
             return f"Error writing file: {e}"
+
+
+# ---------------------------------------------------------------------------
+# copy_file
+# ---------------------------------------------------------------------------
+
+
+@tool_parameters(
+    tool_parameters_schema(
+        source_path=StringSchema("The file path to copy from"),
+        destination_path=StringSchema(
+            "The destination file path or an existing destination directory"
+        ),
+        overwrite=BooleanSchema(description="Overwrite destination when it already exists (default false)"),
+        required=["source_path", "destination_path"],
+    )
+)
+class CopyFileTool(_FsTool):
+    """Copy a file, including binary attachments, within allowed file roots."""
+
+    @property
+    def name(self) -> str:
+        return "copy_file"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Copy a file from one allowed path to another allowed path. "
+            "Use this for arbitrary binary attachments such as archives, installers, images, videos, PDFs, and Office documents. "
+            "If destination_path is an existing directory, the original filename is preserved."
+        )
+
+    async def execute(
+        self,
+        source_path: str | None = None,
+        destination_path: str | None = None,
+        overwrite: bool = False,
+        **kwargs: Any,
+    ) -> str:
+        try:
+            if not source_path:
+                raise ValueError("Unknown source_path")
+            if not destination_path:
+                raise ValueError("Unknown destination_path")
+
+            source = self._resolve(source_path)
+            if not source.exists():
+                return f"Error: File not found: {source_path}"
+            if not source.is_file():
+                return f"Error: Not a file: {source_path}"
+
+            destination_path = _normalize_user_destination_path(destination_path)
+            destination = self._resolve(destination_path)
+            raw_destination = str(destination_path).rstrip()
+            if destination.exists() and destination.is_dir():
+                destination = destination / source.name
+            elif raw_destination.endswith(("\\", "/")):
+                destination = destination / source.name
+
+            if destination.exists() and not overwrite:
+                return f"Error: Destination already exists: {destination}"
+
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            # copy2 按二进制复制并保留元数据，适合未知扩展名、压缩包、视频和 Office 文件。
+            shutil.copy2(source, destination)
+            file_state.record_write(destination)
+            return f"Successfully copied {source} to {destination}"
+        except PermissionError as e:
+            return f"Error: {e}"
+        except Exception as e:
+            return f"Error copying file: {e}"
 
 
 # ---------------------------------------------------------------------------

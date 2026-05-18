@@ -10,6 +10,10 @@ import pytest
 import pytest_asyncio
 
 from nanobot.api.server import (
+    APP_KEY_AGENT_LOOP,
+    APP_KEY_MODEL_NAME,
+    APP_KEY_REQUEST_TIMEOUT,
+    APP_KEY_SESSION_LOCKS,
     API_CHAT_ID,
     API_SESSION_KEY,
     _chat_completion_response,
@@ -97,19 +101,22 @@ async def test_no_user_message_returns_400(aiohttp_client, app) -> None:
         json={"messages": [{"role": "system", "content": "you are a bot"}]},
     )
     assert resp.status == 400
+    body = await resp.json()
+    assert "user message" in body["error"]["message"]
 
 
 @pytest.mark.skipif(not HAS_AIOHTTP, reason="aiohttp not installed")
 @pytest.mark.asyncio
-async def test_stream_true_returns_400(aiohttp_client, app) -> None:
+async def test_stream_true_returns_sse(aiohttp_client, app) -> None:
     client = await aiohttp_client(app)
     resp = await client.post(
         "/v1/chat/completions",
         json={"messages": [{"role": "user", "content": "hello"}], "stream": True},
     )
-    assert resp.status == 400
-    body = await resp.json()
-    assert "stream" in body["error"]["message"].lower()
+    assert resp.status == 200
+    text = await resp.text()
+    assert "chat.completion.chunk" in text
+    assert "[DONE]" in text
 
 
 @pytest.mark.asyncio
@@ -122,10 +129,10 @@ async def test_model_mismatch_returns_400() -> None:
         }
     )
     request.app = {
-        "agent_loop": _make_mock_agent(),
-        "model_name": "test-model",
-        "request_timeout": 10.0,
-        "session_lock": asyncio.Lock(),
+        APP_KEY_AGENT_LOOP: _make_mock_agent(),
+        APP_KEY_MODEL_NAME: "test-model",
+        APP_KEY_REQUEST_TIMEOUT: 10.0,
+        APP_KEY_SESSION_LOCKS: {},
     }
 
     resp = await handle_chat_completions(request)
@@ -135,27 +142,28 @@ async def test_model_mismatch_returns_400() -> None:
 
 
 @pytest.mark.asyncio
-async def test_single_user_message_required() -> None:
+async def test_multi_message_context_is_supported() -> None:
     request = MagicMock()
     request.json = AsyncMock(
         return_value={
             "messages": [
+                {"role": "system", "content": "you are a bot"},
                 {"role": "user", "content": "hello"},
                 {"role": "assistant", "content": "previous reply"},
             ],
         }
     )
     request.app = {
-        "agent_loop": _make_mock_agent(),
-        "model_name": "test-model",
-        "request_timeout": 10.0,
-        "session_lock": asyncio.Lock(),
+        APP_KEY_AGENT_LOOP: _make_mock_agent(),
+        APP_KEY_MODEL_NAME: "test-model",
+        APP_KEY_REQUEST_TIMEOUT: 10.0,
+        APP_KEY_SESSION_LOCKS: {},
     }
 
     resp = await handle_chat_completions(request)
-    assert resp.status == 400
+    assert resp.status == 200
     body = json.loads(resp.body)
-    assert "single user message" in body["error"]["message"].lower()
+    assert body["choices"][0]["message"]["content"] == "mock response"
 
 
 @pytest.mark.asyncio
@@ -167,16 +175,16 @@ async def test_single_user_message_must_have_user_role() -> None:
         }
     )
     request.app = {
-        "agent_loop": _make_mock_agent(),
-        "model_name": "test-model",
-        "request_timeout": 10.0,
-        "session_lock": asyncio.Lock(),
+        APP_KEY_AGENT_LOOP: _make_mock_agent(),
+        APP_KEY_MODEL_NAME: "test-model",
+        APP_KEY_REQUEST_TIMEOUT: 10.0,
+        APP_KEY_SESSION_LOCKS: {},
     }
 
     resp = await handle_chat_completions(request)
     assert resp.status == 400
     body = json.loads(resp.body)
-    assert "single user message" in body["error"]["message"].lower()
+    assert "user message" in body["error"]["message"].lower()
 
 
 @pytest.mark.skipif(not HAS_AIOHTTP, reason="aiohttp not installed")
@@ -193,10 +201,11 @@ async def test_successful_request_uses_fixed_api_session(aiohttp_client, mock_ag
     assert body["choices"][0]["message"]["content"] == "mock response"
     assert body["model"] == "test-model"
     mock_agent.process_direct.assert_called_once_with(
-        content="hello",
+        content="USER:\nhello",
         session_key=API_SESSION_KEY,
         channel="api",
         chat_id=API_CHAT_ID,
+        on_stream=None,
     )
 
 
@@ -205,7 +214,7 @@ async def test_successful_request_uses_fixed_api_session(aiohttp_client, mock_ag
 async def test_followup_requests_share_same_session_key(aiohttp_client) -> None:
     call_log: list[str] = []
 
-    async def fake_process(content, session_key="", channel="", chat_id=""):
+    async def fake_process(content, session_key="", channel="", chat_id="", on_stream=None):
         call_log.append(session_key)
         return f"reply to {content}"
 
@@ -236,7 +245,7 @@ async def test_followup_requests_share_same_session_key(aiohttp_client) -> None:
 async def test_fixed_session_requests_are_serialized(aiohttp_client) -> None:
     order: list[str] = []
 
-    async def slow_process(content, session_key="", channel="", chat_id=""):
+    async def slow_process(content, session_key="", channel="", chat_id="", on_stream=None):
         order.append(f"start:{content}")
         await asyncio.sleep(0.1)
         order.append(f"end:{content}")
@@ -259,11 +268,11 @@ async def test_fixed_session_requests_are_serialized(aiohttp_client) -> None:
     r1, r2 = await asyncio.gather(send("first"), send("second"))
     assert r1.status == 200
     assert r2.status == 200
-    # Verify serialization: one process must fully finish before the other starts
-    if order[0] == "start:first":
-        assert order.index("end:first") < order.index("start:second")
-    else:
-        assert order.index("end:second") < order.index("start:first")
+    assert len(order) == 4
+    assert order[0].startswith("start:")
+    assert order[1].startswith("end:")
+    assert order[2].startswith("start:")
+    assert order[3].startswith("end:")
 
 
 @pytest.mark.skipif(not HAS_AIOHTTP, reason="aiohttp not installed")
@@ -308,10 +317,11 @@ async def test_multimodal_content_extracts_text(aiohttp_client, mock_agent) -> N
     )
     assert resp.status == 200
     mock_agent.process_direct.assert_called_once_with(
-        content="describe this",
+        content="USER:\ndescribe this",
         session_key=API_SESSION_KEY,
         channel="api",
         chat_id=API_CHAT_ID,
+        on_stream=None,
     )
 
 
@@ -320,7 +330,7 @@ async def test_multimodal_content_extracts_text(aiohttp_client, mock_agent) -> N
 async def test_empty_response_retry_then_success(aiohttp_client) -> None:
     call_count = 0
 
-    async def sometimes_empty(content, session_key="", channel="", chat_id=""):
+    async def sometimes_empty(content, session_key="", channel="", chat_id="", on_stream=None):
         nonlocal call_count
         call_count += 1
         if call_count == 1:
@@ -351,7 +361,7 @@ async def test_empty_response_falls_back(aiohttp_client) -> None:
 
     call_count = 0
 
-    async def always_empty(content, session_key="", channel="", chat_id=""):
+    async def always_empty(content, session_key="", channel="", chat_id="", on_stream=None):
         nonlocal call_count
         call_count += 1
         return ""

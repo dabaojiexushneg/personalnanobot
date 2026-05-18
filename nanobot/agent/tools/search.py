@@ -90,6 +90,13 @@ def _matches_type(name: str, file_type: str | None) -> bool:
 class _SearchTool(_FsTool):
     _IGNORE_DIRS = set(ListDirTool._IGNORE_DIRS)
 
+    @staticmethod
+    def _stable_mtime(entry: Path) -> float:
+        try:
+            return float(int(entry.stat().st_mtime))
+        except OSError:
+            return 0.0
+
     def _display_path(self, target: Path, root: Path) -> str:
         if self._workspace:
             try:
@@ -229,7 +236,7 @@ class GlobTool(_SearchTool):
                     if entry.is_dir():
                         display += "/"
                     try:
-                        mtime = entry.stat().st_mtime
+                        mtime = self._stable_mtime(entry)
                     except OSError:
                         mtime = 0.0
                     matches.append((display, mtime))
@@ -442,7 +449,7 @@ class GrepTool(_SearchTool):
                     skipped_binary += 1
                     continue
                 try:
-                    mtime = file_path.stat().st_mtime
+                    mtime = self._stable_mtime(file_path)
                 except OSError:
                     mtime = 0.0
                 try:

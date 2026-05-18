@@ -18,6 +18,23 @@ from nanobot.config.paths import get_media_dir
 _IS_WINDOWS = sys.platform == "win32"
 
 
+def _normalize_windows_command(command: str) -> str:
+    stripped = command.strip()
+    sleep_match = re.fullmatch(r"sleep\s+(\d+)", stripped, flags=re.IGNORECASE)
+    if sleep_match:
+        seconds = sleep_match.group(1)
+        return (
+            "powershell -NoProfile -NonInteractive -Command "
+            f"Start-Sleep -Seconds {seconds}"
+        )
+    return command
+
+
+def _needs_windows_shell(command: str) -> bool:
+    stripped = command.strip()
+    return "\"" in stripped or "\n" in stripped or "\r" in stripped
+
+
 @tool_parameters(
     tool_parameters_schema(
         command=StringSchema("The shell command to execute"),
@@ -47,6 +64,7 @@ class ExecTool(Tool):
         sandbox: str = "",
         path_append: str = "",
         allowed_env_keys: list[str] | None = None,
+        extra_allowed_dirs: list[Path] | None = None,
     ):
         self.timeout = timeout
         self.working_dir = working_dir
@@ -74,6 +92,7 @@ class ExecTool(Tool):
         self.restrict_to_workspace = restrict_to_workspace
         self.path_append = path_append
         self.allowed_env_keys = allowed_env_keys or []
+        self.extra_allowed_dirs = extra_allowed_dirs or []
 
     @property
     def name(self) -> str:
@@ -101,6 +120,8 @@ class ExecTool(Tool):
         timeout: int | None = None, **kwargs: Any,
     ) -> str:
         cwd = working_dir or self.working_dir or os.getcwd()
+        if _IS_WINDOWS:
+            command = _normalize_windows_command(command)
 
         # Prevent an LLM-supplied working_dir from escaping the configured
         # workspace when restrict_to_workspace is enabled (#2826). Without
@@ -113,7 +134,8 @@ class ExecTool(Tool):
                 workspace_root = Path(self.working_dir).expanduser().resolve()
             except Exception:
                 return "Error: working_dir could not be resolved"
-            if requested != workspace_root and workspace_root not in requested.parents:
+            allowed_roots = [workspace_root, *(root.resolve() for root in self.extra_allowed_dirs)]
+            if not any(requested == root or root in requested.parents for root in allowed_roots):
                 return "Error: working_dir is outside the configured workspace"
 
         guard_error = self._guard_command(command, cwd)
@@ -190,8 +212,19 @@ class ExecTool(Tool):
         """Launch *command* in a platform-appropriate shell."""
         if _IS_WINDOWS:
             comspec = env.get("COMSPEC", os.environ.get("COMSPEC", "cmd.exe"))
+            if _needs_windows_shell(command):
+                return await asyncio.create_subprocess_shell(
+                    command,
+                    executable=comspec,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd,
+                    env=env,
+                )
             return await asyncio.create_subprocess_exec(
-                comspec, "/c", command,
+                comspec,
+                "/c",
+                command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=cwd,
@@ -289,30 +322,38 @@ class ExecTool(Tool):
                 return "Error: Command blocked by safety guard (path traversal detected)"
 
             cwd_path = Path(cwd).resolve()
+            allowed_roots = [cwd_path, get_media_dir().resolve()]
+            allowed_roots.extend(root.resolve() for root in self.extra_allowed_dirs)
 
             for raw in self._extract_absolute_paths(cmd):
                 try:
-                    expanded = os.path.expandvars(raw.strip())
+                    expanded = self._expand_shell_path(raw.strip())
                     p = Path(expanded).expanduser().resolve()
                 except Exception:
                     continue
 
-                media_path = get_media_dir().resolve()
-                if (p.is_absolute() 
-                    and cwd_path not in p.parents 
-                    and p != cwd_path
-                    and media_path not in p.parents
-                    and p != media_path
-                ):
+                if p.is_absolute() and not any(p == root or root in p.parents for root in allowed_roots):
                     return "Error: Command blocked by safety guard (path outside working dir)"
 
         return None
+
+    @staticmethod
+    def _expand_shell_path(path: str) -> str:
+        if _IS_WINDOWS:
+            env_match = re.match(r"^\$env:([A-Za-z_][A-Za-z0-9_]*)(.*)$", path)
+            if env_match:
+                value = os.environ.get(env_match.group(1), "")
+                if value:
+                    return value + env_match.group(2)
+        return os.path.expandvars(path)
 
     @staticmethod
     def _extract_absolute_paths(command: str) -> list[str]:
         # Windows: match drive-root paths like `C:\` as well as `C:\path\to\file`
         # NOTE: `*` is required so `C:\` (nothing after the slash) is still extracted.
         win_paths = re.findall(r"[A-Za-z]:\\[^\s\"'|><;]*", command)
+        win_env_paths = re.findall(r"%[A-Za-z_][A-Za-z0-9_]*%\\[^\s\"'|><;]*", command)
+        ps_env_paths = re.findall(r"\$env:[A-Za-z_][A-Za-z0-9_]*\\[^\s\"'|><;]*", command)
         posix_paths = re.findall(r"(?:^|[\s|>'\"])(/[^\s\"'>;|<]+)", command) # POSIX: /absolute only
         home_paths = re.findall(r"(?:^|[\s|>'\"])(~[^\s\"'>;|<]*)", command) # POSIX/Windows home shortcut: ~
-        return win_paths + posix_paths + home_paths
+        return win_paths + win_env_paths + ps_env_paths + posix_paths + home_paths

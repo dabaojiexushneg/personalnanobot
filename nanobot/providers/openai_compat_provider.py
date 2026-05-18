@@ -280,11 +280,10 @@ class OpenAICompatProvider(LLMProvider):
         reasoning_effort: str | None,
         tool_choice: str | dict[str, Any] | None,
     ) -> dict[str, Any]:
-        model_name = model or self.default_model
+        model_name = self._normalize_model_name(model or self.default_model)
         spec = self._spec
 
         if spec and spec.supports_prompt_caching:
-            model_name = model or self.default_model
             if any(model_name.lower().startswith(k) for k in ("anthropic/", "claude")):
                 messages, tools = self._apply_cache_control(messages, tools)
 
@@ -339,6 +338,23 @@ class OpenAICompatProvider(LLMProvider):
             kwargs["tool_choice"] = tool_choice or "auto"
 
         return kwargs
+
+    def _normalize_model_name(self, model_name: str) -> str:
+        """Strip provider prefixes for direct providers that expect bare model IDs."""
+        spec = self._spec
+        if not spec or spec.is_gateway or spec.is_local or "/" not in model_name:
+            return model_name
+
+        prefix, bare = model_name.split("/", 1)
+        normalized_prefix = prefix.lower().replace("-", "_")
+        candidates = {
+            spec.name.lower().replace("-", "_"),
+            spec.name.lower().replace("_", "-").replace("-", "_"),
+        }
+        candidates.update(keyword.lower().replace("-", "_") for keyword in spec.keywords)
+        if normalized_prefix in candidates:
+            return bare
+        return model_name
 
     def _should_use_responses_api(
         self,

@@ -13,7 +13,7 @@ from nanobot.utils.prompt_templates import render_template
 from nanobot.agent.skills import SkillsLoader
 from nanobot.utils.helpers import build_assistant_message, detect_image_mime
 
-
+#   上下文构建器。
 class ContextBuilder:
     """Builds the context (system prompt + messages) for the agent."""
 
@@ -22,11 +22,22 @@ class ContextBuilder:
     _MAX_RECENT_HISTORY = 50
     _RUNTIME_CONTEXT_END = "[/Runtime Context]"
 
-    def __init__(self, workspace: Path, timezone: str | None = None, disabled_skills: list[str] | None = None):
+    def __init__(
+        self,
+        workspace: Path,
+        timezone: str | None = None,
+        disabled_skills: list[str] | None = None,
+        allowed_skills: list[str] | None = None,
+        memory_store: MemoryStore | None = None,
+    ):
         self.workspace = workspace
         self.timezone = timezone
-        self.memory = MemoryStore(workspace)
-        self.skills = SkillsLoader(workspace, disabled_skills=set(disabled_skills) if disabled_skills else None)
+        self.memory = memory_store or MemoryStore(workspace)
+        self.skills = SkillsLoader(
+            workspace,
+            disabled_skills=set(disabled_skills) if disabled_skills else None,
+            allowed_skills=set(allowed_skills) if allowed_skills is not None else None,
+        )
 
     def build_system_prompt(
         self,
@@ -116,6 +127,7 @@ class ContextBuilder:
 
         return "\n\n".join(parts) if parts else ""
 
+#   组装系统 Prompt、历史、记忆、Skills 和用户输入。
     def build_messages(
         self,
         history: list[dict[str, Any]],

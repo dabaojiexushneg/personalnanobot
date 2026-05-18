@@ -1,0 +1,284 @@
+/* Zoned card dashboard for nanobot个人生活账号助手 */
+.app-shell {
+  overflow: hidden;
+}
+
+.main-layout.nb-zoned-dashboard {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.platform-ops.nb-layout-source-empty {
+  display: none !important;
+}
+
+.nb-drop-zone {
+  position: absolute;
+  z-index: 0;
+  border: 1px dashed rgba(122, 135, 151, 0.22);
+  border-radius: var(--radius-md, 14px);
+  background: rgba(245, 247, 251, 0.38);
+  pointer-events: none;
+}
+
+.nb-drop-zone.is-center {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.nb-zone-panel {
+  position: absolute !important;
+  z-index: 2;
+  min-width: 0;
+  min-height: 0;
+  max-width: none !important;
+  overflow: hidden;
+  container-type: inline-size;
+  transition:
+    left 0.2s ease,
+    top 0.2s ease,
+    width 0.2s ease,
+    height 0.2s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.nb-zone-panel.panel-column,
+.nb-zone-panel.ops-card {
+  display: flex !important;
+  flex-direction: column;
+}
+
+.nb-zone-panel .ops-content,
+.nb-zone-panel .chat-log,
+.nb-zone-panel .config-body {
+  min-height: 0;
+}
+
+.nb-zone-panel .ops-content {
+  flex: 1 1 auto;
+}
+
+.nb-zone-panel .list-container,
+.nb-zone-panel .detail-box,
+.nb-zone-panel .trace-detail {
+  min-height: 0;
+}
+
+.nb-zone-panel .nb-zone-drag-handle {
+  cursor: grab;
+  user-select: none;
+}
+
+.nb-zone-panel .nb-zone-drag-handle button,
+.nb-zone-panel .nb-zone-drag-handle input,
+.nb-zone-panel .nb-zone-drag-handle select,
+.nb-zone-panel .nb-zone-drag-handle textarea,
+.nb-zone-panel .nb-zone-drag-handle a,
+.nb-zone-panel .nb-zone-drag-handle label {
+  cursor: auto;
+}
+
+.nb-zone-panel.is-drag-origin {
+  border-color: rgba(36, 84, 214, 0.28);
+  box-shadow: var(--shadow-soft);
+}
+
+.nb-zone-panel.is-zone-sizing {
+  z-index: 6;
+  transition: none;
+  border-color: rgba(36, 84, 214, 0.34);
+  box-shadow: 0 14px 38px rgba(23, 32, 51, 0.11);
+}
+
+.nb-zone-panel.is-zone-placing {
+  transition:
+    left 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 0.22s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.16s ease;
+}
+
+.nb-drag-ghost {
+  position: fixed !important;
+  z-index: 10000;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.88;
+  border-color: rgba(36, 84, 214, 0.42) !important;
+  box-shadow: 0 22px 56px rgba(23, 32, 51, 0.2) !important;
+  filter: saturate(1.02);
+  will-change: transform;
+}
+
+.nb-drag-ghost * {
+  pointer-events: none !important;
+}
+
+.nb-drag-ghost.is-invalid-drop {
+  opacity: 0.58;
+  border-color: rgba(180, 58, 47, 0.42) !important;
+  box-shadow: 0 18px 44px rgba(180, 58, 47, 0.16) !important;
+}
+
+.nb-insertion-indicator {
+  position: absolute;
+  z-index: 5;
+  display: none;
+  height: 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.12);
+  pointer-events: none;
+}
+
+.nb-insertion-indicator.is-visible {
+  display: block;
+}
+
+body.nb-zone-dragging,
+body.nb-zone-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+body.nb-zone-sizing,
+body.nb-zone-sizing * {
+  user-select: none !important;
+}
+
+.nb-zone-resize {
+  position: absolute;
+  z-index: 80;
+  background: transparent;
+  opacity: 0;
+  outline: none;
+  touch-action: none;
+}
+
+.nb-zone-resize.is-left,
+.nb-zone-resize.is-right {
+  top: 10px;
+  bottom: 10px;
+  width: 12px;
+  cursor: col-resize;
+}
+
+.nb-zone-resize.is-left {
+  left: 0;
+}
+
+.nb-zone-resize.is-right {
+  right: 0;
+}
+
+.nb-zone-resize.is-top,
+.nb-zone-resize.is-bottom {
+  right: 10px;
+  left: 10px;
+  height: 12px;
+  cursor: row-resize;
+}
+
+.nb-zone-resize.is-top {
+  top: 0;
+}
+
+.nb-zone-resize.is-bottom {
+  bottom: 0;
+}
+
+.nb-zone-resize.is-top-left,
+.nb-zone-resize.is-top-right,
+.nb-zone-resize.is-bottom-right,
+.nb-zone-resize.is-bottom-left {
+  width: 18px;
+  height: 18px;
+}
+
+.nb-zone-resize.is-top-left {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.nb-zone-resize.is-top-right {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.nb-zone-resize.is-bottom-right {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.nb-zone-resize.is-bottom-left {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.nb-zone-resize:focus,
+.nb-zone-resize:focus-visible {
+  outline: none;
+}
+
+.nb-zoned-dashboard .layout-resizer,
+.nb-zoned-dashboard .card-edge-resizer,
+.nb-zoned-dashboard .nb-splitter,
+.nb-zoned-dashboard .nb-panel-edge {
+  display: none !important;
+}
+
+.nb-zoned-dashboard .right-column,
+.nb-zoned-dashboard .config-panel {
+  display: flex !important;
+}
+
+.nb-zoned-dashboard .ops-card,
+.nb-zoned-dashboard .trace-card,
+.nb-zoned-dashboard .rag-card,
+.nb-zoned-dashboard .task-card,
+.nb-zoned-dashboard .user-card {
+  flex: initial;
+  min-width: 0;
+  width: auto;
+}
+
+@container (max-width: 340px) {
+  .nb-zone-panel .panel-header,
+  .nb-zone-panel .chat-header,
+  .nb-zone-panel h4 {
+    flex-wrap: wrap;
+    min-height: auto;
+    padding: 12px;
+  }
+
+  .nb-zone-panel .assistant-card,
+  .nb-zone-panel .assistant-item {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .nb-zone-panel .assistant-toggle,
+  .nb-zone-panel .assistant-toggle-start,
+  .nb-zone-panel .assistant-toggle-stop {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .nb-zone-panel .flex-split,
+  .nb-zone-panel .trace-flex,
+  .nb-zone-panel .form-group-row,
+  .nb-zone-panel .grid-two,
+  .nb-zone-panel .grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

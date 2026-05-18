@@ -24,6 +24,128 @@ def strip_think(text: str) -> str:
     return text.strip()
 
 
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
+_MD_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+_MD_CODE_FENCE_RE = re.compile(r"```(?:[\w.+-]+)?\s*\n?")
+_MD_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s*", re.MULTILINE)
+_MD_QUOTE_RE = re.compile(r"^\s{0,3}>\s?", re.MULTILINE)
+_MD_RULE_RE = re.compile(r"^\s*([-*_])\1{2,}\s*$", re.MULTILINE)
+_MD_TASK_RE = re.compile(r"^\s*[-*+]\s+\[[ xX]\]\s+")
+_MD_BULLET_RE = re.compile(r"^\s*[-*+]\s+")
+_MD_NUMBERED_RE = re.compile(r"^\s*(\d+)\.\s+")
+_CODE_FENCE_MARKER_RE = re.compile(r"```|~~~")
+_COMMAND_LINE_RE = re.compile(
+    r"^\s*(?:"
+    r"python|pip|uv|node|npm|pnpm|yarn|git|docker|curl|wget|cd|ls|dir|mkdir|rm|cp|mv|cat|type|"
+    r"Get-|Set-|New-|Remove-|Copy-|Move-|Start-|Stop-|Select-|Invoke-|Test-|Write-|Read-|"
+    r"SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP"
+    r")\b",
+    re.IGNORECASE,
+)
+_CODE_LINE_RE = re.compile(
+    r"^\s*(?:"
+    r"(?:def|class|function|async\s+def|if|elif|else|for|while|try|except|finally|return|import|from|"
+    r"const|let|var|public|private|protected|interface|type|package)\b|"
+    r"[A-Za-z_][\w.<>]*\s*=\s*.+|"
+    r"[A-Za-z_][\w.<>]*\([^)]*\)\s*\{?|"
+    r"[{}\[\];]|"
+    r"<[A-Za-z][^>]*>$"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def detect_response_style(text: str | None) -> str:
+    """Classify output as chat vs code for UI rendering."""
+    raw = strip_think(text or "")
+    if not raw:
+        return "chat"
+    if _CODE_FENCE_MARKER_RE.search(raw):
+        return "code"
+
+    lines = [line.rstrip() for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    non_empty = [line for line in lines if line.strip()]
+    if not non_empty:
+        return "chat"
+
+    code_like = 0
+    command_like = 0
+    for line in non_empty:
+        stripped = line.strip()
+        if _COMMAND_LINE_RE.match(stripped):
+            command_like += 1
+            continue
+        if _CODE_LINE_RE.match(stripped):
+            code_like += 1
+            continue
+        if (
+            ("::" in stripped or "->" in stripped or "=>" in stripped)
+            and len(stripped) <= 120
+            and not stripped.endswith(("。", "！", "？"))
+        ):
+            code_like += 1
+
+    if command_like >= 1 and len(non_empty) <= 8:
+        return "code"
+    if code_like >= 2 and code_like >= max(2, len(non_empty) // 2):
+        return "code"
+    return "chat"
+
+
+def prettify_response_text(text: str) -> str:
+    """Convert markdown-ish model output into concise plain-text chat prose."""
+    text = strip_think(text or "")
+    if not text:
+        return ""
+
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = _MD_CODE_FENCE_RE.sub("", text).replace("```", "")
+    text = _MD_HEADING_RE.sub("", text)
+    text = _MD_QUOTE_RE.sub("", text)
+    text = _MD_RULE_RE.sub("", text)
+    text = _MD_IMAGE_RE.sub(lambda m: f"{m.group(1) or '图片'}：{m.group(2)}", text)
+    text = _MD_LINK_RE.sub(lambda m: f"{m.group(1)}（{m.group(2)}）", text)
+
+    cleaned_lines: list[str] = []
+    blank_pending = False
+    for raw_line in text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            if cleaned_lines:
+                blank_pending = True
+            continue
+
+        line = re.sub(r"`([^`]+)`", r"\1", line)
+        line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
+        line = re.sub(r"__([^_]+)__", r"\1", line)
+        line = re.sub(r"(?<!\*)\*([^*\n]+)\*(?!\*)", r"\1", line)
+        line = re.sub(r"(?<!_)_([^_\n]+)_(?!_)", r"\1", line)
+
+        if _MD_TASK_RE.match(line):
+            line = _MD_TASK_RE.sub("- ", line)
+        elif _MD_BULLET_RE.match(line):
+            line = _MD_BULLET_RE.sub("- ", line)
+        elif match := _MD_NUMBERED_RE.match(line):
+            line = _MD_NUMBERED_RE.sub(f"{match.group(1)}. ", line)
+
+        if line.count("|") >= 2 and "http" not in line.lower():
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            if any(cells) and not all(re.fullmatch(r"[:\-\s]+", cell or "") for cell in cells):
+                line = " · ".join(cell for cell in cells if cell)
+            else:
+                continue
+
+        line = re.sub(r"[ \t]{2,}", " ", line).strip()
+        if not line:
+            continue
+        if blank_pending and cleaned_lines:
+            cleaned_lines.append("")
+        cleaned_lines.append(line)
+        blank_pending = False
+
+    return "\n".join(cleaned_lines).strip()
+
+
 def detect_image_mime(data: bytes) -> str | None:
     """Detect image MIME type from magic bytes, ignoring file extension."""
     if data[:8] == b"\x89PNG\r\n\x1a\n":

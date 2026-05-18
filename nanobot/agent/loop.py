@@ -16,12 +16,14 @@ from loguru import logger
 from nanobot.agent.autocompact import AutoCompact
 from nanobot.agent.context import ContextBuilder
 from nanobot.agent.hook import AgentHook, AgentHookContext, CompositeHook
+from nanobot.agent.memory import MemoryStore
 from nanobot.agent.memory import Consolidator, Dream
 from nanobot.agent.runner import _MAX_INJECTIONS_PER_TURN, AgentRunSpec, AgentRunner
 from nanobot.agent.subagent import SubagentManager
 from nanobot.agent.tools.cron import CronTool
 from nanobot.agent.skills import BUILTIN_SKILLS_DIR
-from nanobot.agent.tools.filesystem import EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from nanobot.agent.tools.filesystem import CopyFileTool, EditFileTool, ListDirTool, ReadFileTool, WriteFileTool
+from nanobot.agent.tools.local_paths import get_user_file_roots
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.notebook import NotebookEditTool
 from nanobot.agent.tools.registry import ToolRegistry
@@ -113,9 +115,9 @@ class _LoopHook(AgentHook):
         )
 
     def finalize_content(self, context: AgentHookContext, content: str | None) -> str | None:
-        return self._loop._strip_think(content)
+        return self._loop._prepare_outbound_content(content)
 
-
+#   单助手业务编排层。
 class AgentLoop:
     """
     The agent loop is the core processing engine.
@@ -154,6 +156,10 @@ class AgentLoop:
         hooks: list[AgentHook] | None = None,
         unified_session: bool = False,
         disabled_skills: list[str] | None = None,
+        allowed_skills: list[str] | None = None,
+        memory_store: MemoryStore | None = None,
+        context_builder: ContextBuilder | None = None,
+        extra_read_dirs: list[Path] | None = None,
     ):
         from nanobot.config.schema import ExecToolConfig, WebToolsConfig
 
@@ -185,8 +191,15 @@ class AgentLoop:
         self._start_time = time.time()
         self._last_usage: dict[str, int] = {}
         self._extra_hooks: list[AgentHook] = hooks or []
+        self._extra_read_dirs = extra_read_dirs or []
 
-        self.context = ContextBuilder(workspace, timezone=timezone, disabled_skills=disabled_skills)
+        self.context = context_builder or ContextBuilder(
+            workspace,
+            timezone=timezone,
+            disabled_skills=disabled_skills,
+            allowed_skills=allowed_skills,
+            memory_store=memory_store,
+        )
         self.sessions = session_manager or SessionManager(workspace)
         self.tools = ToolRegistry()
         self.runner = AgentRunner(provider)
@@ -243,21 +256,47 @@ class AgentLoop:
         self.commands = CommandRouter()
         register_builtin_commands(self.commands)
 
+#   注册文件、搜索、消息、执行命令等默认工具。
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
         allowed_dir = (
             self.workspace if (self.restrict_to_workspace or self.exec_config.sandbox) else None
         )
-        extra_read = [BUILTIN_SKILLS_DIR] if allowed_dir else None
+        extra_user_dirs = get_user_file_roots() if allowed_dir else []
+        extra_read = ([BUILTIN_SKILLS_DIR] + self._extra_read_dirs + extra_user_dirs) if allowed_dir else None
+        extra_browse = (self._extra_read_dirs + extra_user_dirs) if allowed_dir else None
+        extra_write = extra_user_dirs if allowed_dir else None
         self.tools.register(
             ReadFileTool(
                 workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_read
             )
         )
-        for cls in (WriteFileTool, EditFileTool, ListDirTool):
-            self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
+        for cls in (WriteFileTool, EditFileTool):
+            self.tools.register(
+                cls(workspace=self.workspace, allowed_dir=allowed_dir, extra_allowed_dirs=extra_write)
+            )
+        self.tools.register(
+            CopyFileTool(
+                workspace=self.workspace,
+                allowed_dir=allowed_dir,
+                extra_allowed_dirs=extra_write,
+            )
+        )
+        self.tools.register(
+            ListDirTool(
+                workspace=self.workspace,
+                allowed_dir=allowed_dir,
+                extra_allowed_dirs=extra_browse,
+            )
+        )
         for cls in (GlobTool, GrepTool):
-            self.tools.register(cls(workspace=self.workspace, allowed_dir=allowed_dir))
+            self.tools.register(
+                cls(
+                    workspace=self.workspace,
+                    allowed_dir=allowed_dir,
+                    extra_allowed_dirs=extra_browse,
+                )
+            )
         self.tools.register(NotebookEditTool(workspace=self.workspace, allowed_dir=allowed_dir))
         if self.exec_config.enable:
             self.tools.register(
@@ -268,6 +307,7 @@ class AgentLoop:
                     sandbox=self.exec_config.sandbox,
                     path_append=self.exec_config.path_append,
                     allowed_env_keys=self.exec_config.allowed_env_keys,
+                    extra_allowed_dirs=extra_write,
                 )
             )
         if self.web_config.enable:
@@ -304,6 +344,7 @@ class AgentLoop:
         finally:
             self._mcp_connecting = False
 
+#   给工具注入 channel、chat_id、message_id。
     def _set_tool_context(self, channel: str, chat_id: str, message_id: str | None = None) -> None:
         """Update context for all tools that need routing info."""
         for name in ("message", "spawn", "cron"):
@@ -319,6 +360,15 @@ class AgentLoop:
         from nanobot.utils.helpers import strip_think
 
         return strip_think(text) or None
+
+    @staticmethod
+    def _prepare_outbound_content(text: str | None) -> str | None:
+        """Normalize assistant replies into concise plain-text chat formatting."""
+        if not text:
+            return None
+        from nanobot.utils.helpers import prettify_response_text
+
+        return prettify_response_text(text) or None
 
     @staticmethod
     def _tool_hint(tool_calls: list) -> str:
@@ -602,6 +652,7 @@ class AgentLoop:
         self._running = False
         logger.info("Agent loop stopping")
 
+#   处理完整入站消息。
     async def _process_message(
         self,
         msg: InboundMessage,
@@ -649,7 +700,7 @@ class AgentLoop:
             return OutboundMessage(
                 channel=channel,
                 chat_id=chat_id,
-                content=final_content or "Background task completed.",
+                content=self._prepare_outbound_content(final_content) or "Background task completed.",
             )
 
         preview = msg.content[:80] + "..." if len(msg.content) > 80 else msg.content
@@ -728,6 +779,8 @@ class AgentLoop:
 
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE
+        else:
+            final_content = self._prepare_outbound_content(final_content) or EMPTY_FINAL_RESPONSE_MESSAGE
 
         # Skip the already-persisted user message when saving the turn
         save_skip = 1 + len(history) + (1 if user_persisted_early else 0)
@@ -856,6 +909,7 @@ class AgentLoop:
     def _clear_pending_user_turn(self, session: Session) -> None:
         session.metadata.pop(self._PENDING_USER_TURN_KEY, None)
 
+#   清理运行断点。
     def _clear_runtime_checkpoint(self, session: Session) -> None:
         if self._RUNTIME_CHECKPOINT_KEY in session.metadata:
             session.metadata.pop(self._RUNTIME_CHECKPOINT_KEY, None)
@@ -872,6 +926,7 @@ class AgentLoop:
             message.get("thinking_blocks"),
         )
 
+#   恢复中断的工具调用状态。
     def _restore_runtime_checkpoint(self, session: Session) -> bool:
         """Materialize an unfinished turn into session history before a new request."""
         from datetime import datetime
@@ -946,6 +1001,7 @@ class AgentLoop:
         self._clear_pending_user_turn(session)
         return True
 
+#   处理 Web/API 直接文本请求。
     async def process_direct(
         self,
         content: str,

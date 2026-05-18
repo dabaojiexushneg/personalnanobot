@@ -1,12 +1,50 @@
-name: Test Suite
+name: CI
 
 on:
   push:
-    branches: [ main, nightly ]
+    branches: [main, nightly]
   pull_request:
-    branches: [ main, nightly ]
+    branches: [main, nightly]
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
+    - name: Install system dependencies
+      run: sudo apt-get update && sudo apt-get install -y libolm-dev build-essential
+
+    - name: Install dependencies
+      run: uv sync --all-extras
+
+    - name: Ruff
+      run: uv run ruff check .
+
+    - name: Build packages
+      run: uv run python -m build --sdist --wheel
+
+    - name: Smoke tests
+      run: >
+        uv run pytest
+        tests/test_openai_api.py
+        tests/cluster/test_control_store.py
+        tests/cluster/test_sqlite_storage.py
+        tests/cluster/test_cluster_runtime.py
+        tests/config/test_config_migration.py
+
+    - name: Dependency audit
+      run: uv run pip-audit
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -27,11 +65,8 @@ jobs:
     - name: Install system dependencies
       run: sudo apt-get update && sudo apt-get install -y libolm-dev build-essential
 
-    - name: Install all dependencies
+    - name: Install dependencies
       run: uv sync --all-extras
 
-    - name: Lint with ruff
-      run: uv run ruff check nanobot --select F401,F841
-
-    - name: Run tests
+    - name: Test suite
       run: uv run pytest tests/

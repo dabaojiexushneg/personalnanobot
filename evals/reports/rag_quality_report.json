@@ -1,0 +1,85 @@
+{
+  "suite": "rag_quality",
+  "generated_at": "2026-05-16T10:46:14.132654+08:00",
+  "dataset": "D:\\agent\\nanobot\\evals\\datasets\\rag_quality_eval_cases.jsonl",
+  "passed": 3,
+  "total": 3,
+  "pass_rate": 100.0,
+  "cases": [
+    {
+      "id": "rag_broadband_fee",
+      "ok": true,
+      "failures": [],
+      "top_title": "个人生活账号助手演示知识库",
+      "top_chunk_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b:1",
+      "score": 0.1994933586337761,
+      "rerank_score": 0.139,
+      "evidence_sentences": [
+        "家庭宽带：每月 18 日扣费，套餐名为「千兆家庭融合演示版」，如果连续两个月费用超过 169 元，需要提醒用户检查增值包。",
+        "续费前 14 天提醒用户检查容量使用率。",
+        "家庭宽带故障排查顺序："
+      ],
+      "citation": {
+        "title": "个人生活账号助手演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_101817_703088_demo_personal_life_account_knowledge.md",
+        "document_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b",
+        "chunk_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b:1",
+        "chunk_index": 1,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    },
+    {
+      "id": "rag_subscription_renewal",
+      "ok": true,
+      "failures": [],
+      "top_title": "个人生活账号助手演示知识库",
+      "top_chunk_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b:0",
+      "score": 0.1997238526423586,
+      "rerank_score": 0.14114285714285715,
+      "evidence_sentences": [
+        "# nanobot个人生活账号助手演示知识库",
+        "不要把真实密码、验证码、身份证号、银行卡号、API Key 或私人聊天记录写入演示知识库。",
+        "云盘会员：每年 6 月 12 日续费，主要用于照片和项目资料备份；"
+      ],
+      "citation": {
+        "title": "个人生活账号助手演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_101817_703088_demo_personal_life_account_knowledge.md",
+        "document_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b",
+        "chunk_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b:0",
+        "chunk_index": 0,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    },
+    {
+      "id": "rag_account_priority",
+      "ok": true,
+      "failures": [],
+      "top_title": "个人生活账号助手演示知识库",
+      "top_chunk_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b:0",
+      "score": 0.17119958365860005,
+      "rerank_score": 0.12455555555555556,
+      "evidence_sentences": [
+        "nanobot个人生活账号助手用于帮助用户整理个人生活中的账号资料、服务订阅、家庭事务、出行偏好和日常提醒。",
+        "1. 涉及账号安全时，只能提醒用户去官方 App 或官网操作，不能要求用户提供密码、验证码或支付口令。",
+        "账号整理优先级是：安全风险 > 即将到期 > 高频使用 > 可自动化提醒。"
+      ],
+      "citation": {
+        "title": "个人生活账号助手演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_101817_703088_demo_personal_life_account_knowledge.md",
+        "document_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b",
+        "chunk_id": "2608b014-a4b4-4a6d-86b5-e42c877a363b:0",
+        "chunk_index": 0,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    }
+  ]
+}

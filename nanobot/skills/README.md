@@ -1,31 +1,33 @@
 # nanobot Skills
 
-This directory contains built-in skills that extend nanobot's capabilities.
+该目录存放 nanobot 内置 skills，用于扩展 agent 的能力。
 
-## Skill Format
+## Skill 格式
 
-Each skill is a directory containing a `SKILL.md` file with:
-- YAML frontmatter (name, description, metadata)
-- Markdown instructions for the agent
+每个 skill 都是一个独立目录，目录中必须包含 `SKILL.md`：
 
-When skills reference large local documentation or logs, prefer nanobot's built-in
-`grep` / `glob` tools to narrow the search space before loading full files.
-Use `grep(output_mode="count")` / `files_with_matches` for broad searches first,
-use `head_limit` / `offset` to page through large result sets,
-and `glob(entry_type="dirs")` when discovering directory structure matters.
+- YAML frontmatter：声明 `name`、`description` 和可选 metadata。
+- Markdown 正文：给 agent 的使用说明、流程和注意事项。
 
-## Attribution
+当 skill 需要引用较大的本地文档或日志时，优先使用 nanobot 内置的 `grep` / `glob` 工具缩小搜索范围，再读取完整文件。
 
-These skills are adapted from [OpenClaw](https://github.com/openclaw/openclaw)'s skill system.
-The skill format and metadata structure follow OpenClaw's conventions to maintain compatibility.
+建议：
 
-## Available Skills
+- 宽泛搜索先用 `grep(output_mode="count")` 或默认的 `files_with_matches`。
+- 大文件分页使用 `head_limit` / `offset`。
+- 需要发现目录结构时使用 `glob(entry_type="dirs")`。
 
-| Skill | Description |
-|-------|-------------|
-| `github` | Interact with GitHub using the `gh` CLI |
-| `weather` | Get weather info using wttr.in and Open-Meteo |
-| `summarize` | Summarize URLs, files, and YouTube videos |
-| `tmux` | Remote-control tmux sessions |
-| `clawhub` | Search and install skills from ClawHub registry |
-| `skill-creator` | Create new skills |
+## 来源说明
+
+这些 skills 借鉴了 [OpenClaw](https://github.com/openclaw/openclaw) 的 skill system。Skill 格式和 metadata 结构保持兼容，方便后续复用和迁移。
+
+## 当前内置 Skills
+
+| Skill | 说明 |
+| --- | --- |
+| `github` | 使用 `gh` CLI 操作 GitHub |
+| `weather` | 使用 wttr.in 和 Open-Meteo 查询天气 |
+| `summarize` | 总结 URL、本地文件和 YouTube 视频 |
+| `tmux` | 远程控制 tmux 会话 |
+| `clawhub` | 从 ClawHub 注册表搜索和安装 skills |
+| `skill-creator` | 创建和维护新的 skills |

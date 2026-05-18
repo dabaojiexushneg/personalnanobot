@@ -1,14 +1,14 @@
 ---
 name: tmux
-description: Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.
+description: 通过 tmux 远程控制交互式 CLI，会话可发送按键、抓取 pane 输出和监控长时间运行的交互程序。适用于需要真实 TTY、并行运行 coding agent 或观察交互式命令输出的场景。
 metadata: {"nanobot":{"emoji":"🧵","os":["darwin","linux"],"requires":{"bins":["tmux"]}}}
 ---
 
-# tmux Skill
+# tmux 会话控制技能
 
-Use tmux only when you need an interactive TTY. Prefer exec background mode for long-running, non-interactive tasks.
+只有在需要交互式 TTY 时才使用 tmux。对于普通长时间但非交互式任务，优先使用 `exec` 的后台模式。
 
-## Quickstart (isolated socket, exec tool)
+## 快速开始：隔离 socket
 
 ```bash
 SOCKET_DIR="${NANOBOT_TMUX_SOCKET_DIR:-${TMPDIR:-/tmp}/nanobot-tmux-sockets}"
@@ -21,67 +21,89 @@ tmux -S "$SOCKET" send-keys -t "$SESSION":0.0 -- 'PYTHON_BASIC_REPL=1 python3 -q
 tmux -S "$SOCKET" capture-pane -p -J -t "$SESSION":0.0 -S -200
 ```
 
-After starting a session, always print monitor commands:
+启动 session 后，始终把监控命令输出给用户：
 
-```
-To monitor:
+```text
+查看方式：
   tmux -S "$SOCKET" attach -t "$SESSION"
   tmux -S "$SOCKET" capture-pane -p -J -t "$SESSION":0.0 -S -200
 ```
 
-## Socket convention
+## Socket 约定
 
-- Use `NANOBOT_TMUX_SOCKET_DIR` environment variable.
-- Default socket path: `"$NANOBOT_TMUX_SOCKET_DIR/nanobot.sock"`.
+- 使用 `NANOBOT_TMUX_SOCKET_DIR` 环境变量。
+- 默认 socket 路径：`"$NANOBOT_TMUX_SOCKET_DIR/nanobot.sock"`。
 
-## Targeting panes and naming
+## Pane 定位和命名
 
-- Target format: `session:window.pane` (defaults to `:0.0`).
-- Keep names short; avoid spaces.
-- Inspect: `tmux -S "$SOCKET" list-sessions`, `tmux -S "$SOCKET" list-panes -a`.
+- target 格式：`session:window.pane`，默认 `:0.0`。
+- session 名称保持简短，避免空格。
+- 查看会话：`tmux -S "$SOCKET" list-sessions`。
+- 查看所有 pane：`tmux -S "$SOCKET" list-panes -a`。
 
-## Finding sessions
+## 查找会话
 
-- List sessions on your socket: `{baseDir}/scripts/find-sessions.sh -S "$SOCKET"`.
-- Scan all sockets: `{baseDir}/scripts/find-sessions.sh --all` (uses `NANOBOT_TMUX_SOCKET_DIR`).
+- 当前 socket 上列出 session：`{baseDir}/scripts/find-sessions.sh -S "$SOCKET"`。
+- 扫描全部 socket：`{baseDir}/scripts/find-sessions.sh --all`，会使用 `NANOBOT_TMUX_SOCKET_DIR`。
 
-## Sending input safely
+## 安全发送输入
 
-- Prefer literal sends: `tmux -S "$SOCKET" send-keys -t target -l -- "$cmd"`.
-- Control keys: `tmux -S "$SOCKET" send-keys -t target C-c`.
+- 优先使用字面量发送：
 
-## Watching output
+```bash
+tmux -S "$SOCKET" send-keys -t target -l -- "$cmd"
+```
 
-- Capture recent history: `tmux -S "$SOCKET" capture-pane -p -J -t target -S -200`.
-- Wait for prompts: `{baseDir}/scripts/wait-for-text.sh -t session:0.0 -p 'pattern'`.
-- Attaching is OK; detach with `Ctrl+b d`.
+- 控制键示例：
 
-## Spawning processes
+```bash
+tmux -S "$SOCKET" send-keys -t target C-c
+```
 
-- For python REPLs, set `PYTHON_BASIC_REPL=1` (non-basic REPL breaks send-keys flows).
+## 观察输出
+
+- 抓取最近历史：
+
+```bash
+tmux -S "$SOCKET" capture-pane -p -J -t target -S -200
+```
+
+- 等待指定提示或文本：
+
+```bash
+{baseDir}/scripts/wait-for-text.sh -t session:0.0 -p 'pattern'
+```
+
+- 可以 attach 查看；退出 attach 用 `Ctrl+b d`。
+
+## Python REPL 注意事项
+
+启动 Python REPL 时设置：
+
+```bash
+PYTHON_BASIC_REPL=1
+```
+
+非 basic REPL 可能会破坏 `send-keys` 流程。
 
 ## Windows / WSL
 
-- tmux is supported on macOS/Linux. On Windows, use WSL and install tmux inside WSL.
-- This skill is gated to `darwin`/`linux` and requires `tmux` on PATH.
+tmux 支持 macOS 和 Linux。Windows 上请使用 WSL，并在 WSL 内安装 tmux。本 skill 已限制为 `darwin` / `linux`，并要求 PATH 中存在 `tmux`。
 
-## Orchestrating Coding Agents (Codex, Claude Code)
+## 编排多个 Coding Agent
 
-tmux excels at running multiple coding agents in parallel:
+tmux 适合并行运行多个 coding agent：
 
 ```bash
 SOCKET="${TMPDIR:-/tmp}/codex-army.sock"
 
-# Create multiple sessions
 for i in 1 2 3 4 5; do
   tmux -S "$SOCKET" new-session -d -s "agent-$i"
 done
 
-# Launch agents in different workdirs
 tmux -S "$SOCKET" send-keys -t agent-1 "cd /tmp/project1 && codex --yolo 'Fix bug X'" Enter
 tmux -S "$SOCKET" send-keys -t agent-2 "cd /tmp/project2 && codex --yolo 'Fix bug Y'" Enter
 
-# Poll for completion (check if prompt returned)
 for sess in agent-1 agent-2; do
   if tmux -S "$SOCKET" capture-pane -p -t "$sess" -S -3 | grep -q "❯"; then
     echo "$sess: DONE"
@@ -90,32 +112,48 @@ for sess in agent-1 agent-2; do
   fi
 done
 
-# Get full output from completed session
 tmux -S "$SOCKET" capture-pane -p -t agent-1 -S -500
 ```
 
-**Tips:**
-- Use separate git worktrees for parallel fixes (no branch conflicts)
-- `pnpm install` first before running codex in fresh clones
-- Check for shell prompt (`❯` or `$`) to detect completion
-- Codex needs `--yolo` or `--full-auto` for non-interactive fixes
+提示：
 
-## Cleanup
+- 并行修复时使用不同 git worktree，避免分支冲突。
+- 新 clone 先执行 `pnpm install` 等依赖安装。
+- 通过 shell prompt，例如 `❯` 或 `$`，判断任务是否完成。
+- Codex 非交互运行通常需要 `--yolo` 或 `--full-auto`。
 
-- Kill a session: `tmux -S "$SOCKET" kill-session -t "$SESSION"`.
-- Kill all sessions on a socket: `tmux -S "$SOCKET" list-sessions -F '#{session_name}' | xargs -r -n1 tmux -S "$SOCKET" kill-session -t`.
-- Remove everything on the private socket: `tmux -S "$SOCKET" kill-server`.
+## 清理
 
-## Helper: wait-for-text.sh
+- 删除一个 session：
 
-`{baseDir}/scripts/wait-for-text.sh` polls a pane for a regex (or fixed string) with a timeout.
+```bash
+tmux -S "$SOCKET" kill-session -t "$SESSION"
+```
+
+- 删除某个 socket 上所有 session：
+
+```bash
+tmux -S "$SOCKET" list-sessions -F '#{session_name}' | xargs -r -n1 tmux -S "$SOCKET" kill-session -t
+```
+
+- 删除整个私有 socket server：
+
+```bash
+tmux -S "$SOCKET" kill-server
+```
+
+## 辅助脚本：wait-for-text.sh
+
+`{baseDir}/scripts/wait-for-text.sh` 会轮询 pane 输出，直到匹配 regex 或固定字符串，或直到超时。
 
 ```bash
 {baseDir}/scripts/wait-for-text.sh -t session:0.0 -p 'pattern' [-F] [-T 20] [-i 0.5] [-l 2000]
 ```
 
-- `-t`/`--target` pane target (required)
-- `-p`/`--pattern` regex to match (required); add `-F` for fixed string
-- `-T` timeout seconds (integer, default 15)
-- `-i` poll interval seconds (default 0.5)
-- `-l` history lines to search (integer, default 1000)
+参数：
+
+- `-t` / `--target`：pane target，必填。
+- `-p` / `--pattern`：要匹配的 regex，必填；加 `-F` 表示固定字符串。
+- `-T`：超时时间，单位秒，默认 15。
+- `-i`：轮询间隔，默认 0.5 秒。
+- `-l`：搜索的历史行数，默认 1000。

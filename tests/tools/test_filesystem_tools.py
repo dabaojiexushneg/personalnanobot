@@ -3,6 +3,7 @@
 import pytest
 
 from nanobot.agent.tools.filesystem import (
+    CopyFileTool,
     EditFileTool,
     ListDirTool,
     ReadFileTool,
@@ -322,6 +323,23 @@ class TestWorkspaceRestriction:
         assert "Error" not in result
 
     @pytest.mark.asyncio
+    async def test_list_dir_allowed_with_extra_dir(self, tmp_path):
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        uploads_dir = tmp_path / "web_uploads"
+        uploads_dir.mkdir()
+        (uploads_dir / "demo.png").write_text("fake image marker", encoding="utf-8")
+
+        tool = ListDirTool(
+            workspace=workspace,
+            allowed_dir=workspace,
+            extra_allowed_dirs=[uploads_dir],
+        )
+        result = await tool.execute(path=str(uploads_dir))
+        assert "demo.png" in result
+        assert "Error" not in result
+
+    @pytest.mark.asyncio
     async def test_read_allowed_in_media_dir(self, tmp_path, monkeypatch):
         workspace = tmp_path / "ws"
         workspace.mkdir()
@@ -350,6 +368,93 @@ class TestWorkspaceRestriction:
         result = await tool.execute(path=str(outside / "hack.txt"), content="pwned")
         assert "Error" in result
         assert "outside" in result.lower()
+
+    @pytest.mark.asyncio
+    async def test_copy_file_allows_extra_destination_dir(self, tmp_path):
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        desktop = tmp_path / "Desktop"
+        desktop.mkdir()
+        source = workspace / "photo.png"
+        source.write_bytes(b"fake-png")
+
+        tool = CopyFileTool(
+            workspace=workspace,
+            allowed_dir=workspace,
+            extra_allowed_dirs=[desktop],
+        )
+        result = await tool.execute(
+            source_path=str(source),
+            destination_path=str(desktop),
+        )
+
+        assert "Successfully copied" in result
+        assert (desktop / "photo.png").read_bytes() == b"fake-png"
+
+    @pytest.mark.asyncio
+    async def test_copy_file_maps_desktop_alias_to_real_desktop(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        desktop = tmp_path / "Desktop"
+        desktop.mkdir()
+        source = workspace / "demo.docx"
+        source.write_bytes(b"docx")
+        monkeypatch.setattr("nanobot.agent.tools.filesystem.get_desktop_dir", lambda: desktop)
+
+        tool = CopyFileTool(
+            workspace=workspace,
+            allowed_dir=workspace,
+            extra_allowed_dirs=[desktop],
+        )
+        result = await tool.execute(
+            source_path=str(source),
+            destination_path="电脑桌面",
+        )
+
+        assert "Successfully copied" in result
+        assert (desktop / "demo.docx").read_bytes() == b"docx"
+
+    @pytest.mark.asyncio
+    async def test_copy_file_maps_desktop_child_alias_to_real_desktop(self, tmp_path, monkeypatch):
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        desktop = tmp_path / "Desktop"
+        desktop.mkdir()
+        source = workspace / "photo.jpg"
+        source.write_bytes(b"jpg")
+        monkeypatch.setattr("nanobot.agent.tools.filesystem.get_desktop_dir", lambda: desktop)
+
+        tool = CopyFileTool(
+            workspace=workspace,
+            allowed_dir=workspace,
+            extra_allowed_dirs=[desktop],
+        )
+        result = await tool.execute(
+            source_path=str(source),
+            destination_path=r"桌面\微信图片.jpg",
+        )
+
+        assert "Successfully copied" in result
+        assert (desktop / "微信图片.jpg").read_bytes() == b"jpg"
+
+    @pytest.mark.asyncio
+    async def test_copy_file_blocks_unrelated_destination_dir(self, tmp_path):
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        source = workspace / "photo.png"
+        source.write_bytes(b"fake-png")
+
+        tool = CopyFileTool(workspace=workspace, allowed_dir=workspace)
+        result = await tool.execute(
+            source_path=str(source),
+            destination_path=str(outside / "photo.png"),
+        )
+
+        assert "Error" in result
+        assert "outside" in result.lower()
+        assert not (outside / "photo.png").exists()
 
     @pytest.mark.asyncio
     async def test_read_still_blocked_for_unrelated_dir(self, tmp_path):

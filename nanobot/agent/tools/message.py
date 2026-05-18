@@ -71,8 +71,9 @@ class MessageTool(Tool):
         media: list[str] | None = None,
         **kwargs: Any
     ) -> str:
-        from nanobot.utils.helpers import strip_think
-        content = strip_think(content)
+        from nanobot.utils.helpers import prettify_response_text
+
+        content = prettify_response_text(content)
         
         channel = channel or self._default_channel
         chat_id = chat_id or self._default_chat_id

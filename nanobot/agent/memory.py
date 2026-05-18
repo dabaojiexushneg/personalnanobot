@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # MemoryStore — pure file I/O layer
 # ---------------------------------------------------------------------------
-
+#   管理记忆文件。
 class MemoryStore:
     """Pure file I/O for memory files: MEMORY.md, history.jsonl, SOUL.md, USER.md."""
 
@@ -213,13 +213,13 @@ class MemoryStore:
         self.user_file.write_text(content, encoding="utf-8")
 
     # -- context injection (used by context.py) ------------------------------
-
+#   读取长期记忆并注入上下文。
     def get_memory_context(self) -> str:
         long_term = self.read_memory()
         return f"## Long-term Memory\n{long_term}" if long_term else ""
 
     # -- history.jsonl — append-only, JSONL format ---------------------------
-
+#   追加历史摘要到 history.jsonl。
     def append_history(self, entry: str) -> int:
         """Append *entry* to history.jsonl and return its auto-incrementing cursor."""
         cursor = self._next_cursor()
@@ -342,7 +342,7 @@ class MemoryStore:
 # Consolidator — lightweight token-budget triggered consolidation
 # ---------------------------------------------------------------------------
 
-
+#   token 超限时压缩历史。
 class Consolidator:
     """Lightweight consolidation: summarizes evicted messages into history.jsonl."""
 
@@ -433,6 +433,7 @@ class Consolidator:
             self._get_tool_definitions(),
         )
 
+#   调用模型总结旧消息。
     async def archive(self, messages: list[dict]) -> str | None:
         """Summarize messages via LLM and append to history.jsonl.
 
@@ -465,6 +466,7 @@ class Consolidator:
             self.store.raw_archive(messages)
             return None
 
+#   判断是否需要触发历史压缩。
     async def maybe_consolidate_by_tokens(self, session: Session) -> None:
         """Loop: archive old messages until prompt fits within safe budget.
 
@@ -551,7 +553,7 @@ class Consolidator:
 # Dream — heavyweight cron-scheduled memory consolidation
 # ---------------------------------------------------------------------------
 
-
+#   长期记忆整理器。
 class Dream:
     """Two-phase memory processor: analyze history.jsonl, then edit files via AgentRunner.
 
@@ -631,7 +633,7 @@ class Dream:
         return [f"{name} — {desc}" for name, desc in sorted(entries.items())]
 
     # -- main entry ----------------------------------------------------------
-
+#   分析历史并更新长期记忆文件。
     async def run(self) -> bool:
         """Process unprocessed history entries. Returns True if work was done."""
         from nanobot.agent.skills import BUILTIN_SKILLS_DIR

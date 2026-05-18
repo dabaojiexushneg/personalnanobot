@@ -1,0 +1,4 @@
+{"id":"chat-greeting","assistant_id":"consult","input":"请用一句话介绍你自己","expect_contains":["助手"],"forbid_contains":["报错","traceback"]}
+{"id":"rag-explain","assistant_id":"consult","input":"如果知识库里有微信登录文档，请解释一下机器人登录流程","expect_contains":["登录"],"forbid_contains":["traceback"]}
+{"id":"image-intent","assistant_id":"consult","input":"生成一张西红柿鸡蛋面的图片","expect_contains":["图片"],"forbid_contains":["traceback"]}
+{"id":"developer-summary","assistant_id":"developer","input":"请给我一个简短的开发日报模板","expect_contains":["今日完成","下一步"],"forbid_contains":["traceback"]}

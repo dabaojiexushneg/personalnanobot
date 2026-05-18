@@ -1,0 +1,378 @@
+{
+  "updated_at": "2026-04-26",
+  "storage_strategy": "single_milvus_collection_with_metadata_filters",
+  "default_collection_name": "knowledge_chunks",
+  "metadata_keys": [
+    "assistant_id",
+    "collection_key",
+    "source_name",
+    "source_url",
+    "source_type",
+    "priority",
+    "tags",
+    "language",
+    "refresh_days",
+    "license_note",
+    "retrieved_at"
+  ],
+  "assistants": {
+    "consult": {
+      "display_name": "AI 咨询助手",
+      "rag_libraries": [
+        {
+          "collection_key": "consult_prompt_ops",
+          "priority": "P0",
+          "refresh_days": 30,
+          "sources": [
+            {
+              "name": "OpenAI Prompt Engineering Guide",
+              "url": "https://platform.openai.com/docs/guides/prompt-engineering",
+              "source_type": "official_docs",
+              "tags": ["prompt", "quality", "consulting"]
+            },
+            {
+              "name": "Google Gemini Prompt Design Strategies",
+              "url": "https://ai.google.dev/gemini-api/docs/prompting-strategies",
+              "source_type": "official_docs",
+              "tags": ["prompt", "structured_output", "constraints"]
+            },
+            {
+              "name": "Anthropic Prompt Engineering Overview",
+              "url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview",
+              "source_type": "official_docs",
+              "tags": ["prompt", "long_context", "reasoning"]
+            }
+          ]
+        },
+        {
+          "collection_key": "consult_safety_boundaries",
+          "priority": "P1",
+          "refresh_days": 90,
+          "sources": [
+            {
+              "name": "NIST AI Risk Management Framework",
+              "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+              "source_type": "government_framework",
+              "tags": ["ai_risk", "governance", "safety"]
+            }
+          ]
+        }
+      ]
+    },
+    "image": {
+      "display_name": "AI 生图助手",
+      "rag_libraries": [
+        {
+          "collection_key": "image_prompting",
+          "priority": "P0",
+          "refresh_days": 30,
+          "sources": [
+            {
+              "name": "OpenAI Image Generation Guide",
+              "url": "https://platform.openai.com/docs/guides/image-generation",
+              "source_type": "official_docs",
+              "tags": ["image_generation", "prompt", "editing"]
+            },
+            {
+              "name": "Google Gemini Prompt Design Strategies",
+              "url": "https://ai.google.dev/gemini-api/docs/prompting-strategies",
+              "source_type": "official_docs",
+              "tags": ["prompt", "image_prompting", "constraints"]
+            }
+          ]
+        },
+        {
+          "collection_key": "image_model_guides",
+          "priority": "P0",
+          "refresh_days": 30,
+          "sources": [
+            {
+              "name": "Doubao Seedream 4.0",
+              "url": "https://research.doubao.com/en/seedream4_0",
+              "source_type": "model_page",
+              "tags": ["doubao", "seedream", "image_model"]
+            }
+          ]
+        },
+        {
+          "collection_key": "image_style_reference",
+          "priority": "P1",
+          "refresh_days": 180,
+          "sources": [
+            {
+              "name": "Project Image Style Playbook",
+              "url": "local://docs/rag/image_style_playbook.md",
+              "source_type": "local_playbook",
+              "tags": ["style", "brand", "prompt_templates"]
+            }
+          ]
+        }
+      ]
+    },
+    "developer": {
+      "display_name": "AI 开发助手",
+      "rag_libraries": [
+        {
+          "collection_key": "developer_api_docs",
+          "priority": "P0",
+          "refresh_days": 30,
+          "sources": [
+            {
+              "name": "GitHub REST API Docs",
+              "url": "https://docs.github.com/en/rest",
+              "source_type": "official_docs",
+              "tags": ["github", "api", "automation"]
+            },
+            {
+              "name": "Google Developer Documentation Style Guide",
+              "url": "https://developers.google.com/style",
+              "source_type": "official_docs",
+              "tags": ["documentation", "developer_experience", "style"]
+            }
+          ]
+        },
+        {
+          "collection_key": "developer_architecture",
+          "priority": "P0",
+          "refresh_days": 60,
+          "sources": [
+            {
+              "name": "Azure Cloud Design Patterns",
+              "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/",
+              "source_type": "official_docs",
+              "tags": ["architecture", "patterns", "resilience"]
+            },
+            {
+              "name": "Google Cloud Architecture Framework",
+              "url": "https://cloud.google.com/architecture/framework",
+              "source_type": "official_docs",
+              "tags": ["architecture", "reliability", "security"]
+            }
+          ]
+        },
+        {
+          "collection_key": "developer_rag_agent",
+          "priority": "P0",
+          "refresh_days": 30,
+          "sources": [
+            {
+              "name": "LangChain RAG Agent Guide",
+              "url": "https://docs.langchain.com/oss/python/langchain/rag",
+              "source_type": "official_docs",
+              "tags": ["rag", "agent", "retrieval"]
+            },
+            {
+              "name": "LlamaIndex RAG Introduction",
+              "url": "https://docs.llamaindex.ai/en/stable/understanding/rag/",
+              "source_type": "official_docs",
+              "tags": ["rag", "indexing", "retrieval"]
+            },
+            {
+              "name": "Milvus Overview",
+              "url": "https://milvus.io/docs/overview.md",
+              "source_type": "official_docs",
+              "tags": ["milvus", "vector_database", "hybrid_search"]
+            }
+          ]
+        }
+      ]
+    },
+    "investment": {
+      "display_name": "AI 投资助手",
+      "rag_libraries": [
+        {
+          "collection_key": "investment_education",
+          "priority": "P0",
+          "refresh_days": 90,
+          "sources": [
+            {
+              "name": "Investor.gov Diversification",
+              "url": "https://www.investor.gov/introduction-investing/investing-basics/glossary/diversification",
+              "source_type": "government_education",
+              "tags": ["investment", "diversification", "education"]
+            },
+            {
+              "name": "FINRA Asset Allocation and Diversification",
+              "url": "https://www.finra.org/investors/investing/investing-basics/asset-allocation-diversification",
+              "source_type": "regulatory_education",
+              "tags": ["investment", "asset_allocation", "risk"]
+            }
+          ]
+        },
+        {
+          "collection_key": "investment_risk",
+          "priority": "P0",
+          "refresh_days": 90,
+          "sources": [
+            {
+              "name": "Investor.gov Investor Education",
+              "url": "https://www.investor.gov/",
+              "source_type": "government_education",
+              "tags": ["risk", "fraud", "investor_protection"]
+            },
+            {
+              "name": "FINRA Investors",
+              "url": "https://www.finra.org/investors",
+              "source_type": "regulatory_education",
+              "tags": ["risk", "compliance", "education"]
+            }
+          ]
+        }
+      ]
+    },
+    "community": {
+      "display_name": "AI 社区助手",
+      "rag_libraries": [
+        {
+          "collection_key": "community_moderation",
+          "priority": "P0",
+          "refresh_days": 90,
+          "sources": [
+            {
+              "name": "Discourse Moderation Guide",
+              "url": "https://meta.discourse.org/t/discourse-moderation-guide/63116",
+              "source_type": "community_platform_docs",
+              "tags": ["moderation", "community", "governance"]
+            },
+            {
+              "name": "GitHub Community Code of Conduct",
+              "url": "https://docs.github.com/en/site-policy/github-terms/github-community-code-of-conduct/",
+              "source_type": "official_policy",
+              "tags": ["code_of_conduct", "moderation", "community"]
+            }
+          ]
+        },
+        {
+          "collection_key": "community_health",
+          "priority": "P1",
+          "refresh_days": 120,
+          "sources": [
+            {
+              "name": "GitHub Community Health Files",
+              "url": "https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file",
+              "source_type": "official_docs",
+              "tags": ["community_health", "open_source", "contributing"]
+            },
+            {
+              "name": "Mozilla Community Participation Guidelines",
+              "url": "https://www.mozilla.org/about/governance/policies/participation/",
+              "source_type": "official_policy",
+              "tags": ["participation", "governance", "safety"]
+            }
+          ]
+        }
+      ]
+    },
+    "writer": {
+      "display_name": "AI 写作助手",
+      "rag_libraries": [
+        {
+          "collection_key": "writer_plain_language",
+          "priority": "P0",
+          "refresh_days": 180,
+          "sources": [
+            {
+              "name": "Plain Language Guide",
+              "url": "https://www.plainlanguage.gov/guidelines/",
+              "source_type": "government_guide",
+              "tags": ["plain_language", "clarity", "public_writing"]
+            },
+            {
+              "name": "GOV.UK Style Guide",
+              "url": "https://www.gov.uk/guidance/style-guide",
+              "source_type": "government_guide",
+              "tags": ["style", "public_service", "writing"]
+            }
+          ]
+        },
+        {
+          "collection_key": "writer_tech_style",
+          "priority": "P0",
+          "refresh_days": 120,
+          "sources": [
+            {
+              "name": "Microsoft Writing Style Guide",
+              "url": "https://learn.microsoft.com/en-us/style-guide/welcome/",
+              "source_type": "official_docs",
+              "tags": ["technical_writing", "voice", "terminology"]
+            },
+            {
+              "name": "Google Developer Documentation Style Guide",
+              "url": "https://developers.google.com/style",
+              "source_type": "official_docs",
+              "tags": ["developer_docs", "style", "clarity"]
+            }
+          ]
+        }
+      ]
+    },
+    "expert": {
+      "display_name": "AI 智能专家",
+      "rag_libraries": [
+        {
+          "collection_key": "expert_ai_risk",
+          "priority": "P0",
+          "refresh_days": 90,
+          "sources": [
+            {
+              "name": "NIST AI Risk Management Framework",
+              "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+              "source_type": "government_framework",
+              "tags": ["ai_risk", "governance", "evaluation"]
+            },
+            {
+              "name": "OpenAI Prompt Engineering Guide",
+              "url": "https://platform.openai.com/docs/guides/prompt-engineering",
+              "source_type": "official_docs",
+              "tags": ["prompt", "safety", "quality"]
+            }
+          ]
+        },
+        {
+          "collection_key": "expert_cloud_architecture",
+          "priority": "P0",
+          "refresh_days": 60,
+          "sources": [
+            {
+              "name": "Azure Cloud Design Patterns",
+              "url": "https://learn.microsoft.com/en-us/azure/architecture/patterns/",
+              "source_type": "official_docs",
+              "tags": ["architecture", "patterns", "distributed_systems"]
+            },
+            {
+              "name": "Google Cloud Architecture Framework",
+              "url": "https://cloud.google.com/architecture/framework",
+              "source_type": "official_docs",
+              "tags": ["architecture", "operations", "security"]
+            }
+          ]
+        },
+        {
+          "collection_key": "expert_rag_patterns",
+          "priority": "P0",
+          "refresh_days": 30,
+          "sources": [
+            {
+              "name": "LangChain RAG Agent Guide",
+              "url": "https://docs.langchain.com/oss/python/langchain/rag",
+              "source_type": "official_docs",
+              "tags": ["rag", "agent", "retrieval"]
+            },
+            {
+              "name": "LlamaIndex RAG Introduction",
+              "url": "https://docs.llamaindex.ai/en/stable/understanding/rag/",
+              "source_type": "official_docs",
+              "tags": ["rag", "indexing", "query_engine"]
+            },
+            {
+              "name": "Milvus Overview",
+              "url": "https://milvus.io/docs/overview.md",
+              "source_type": "official_docs",
+              "tags": ["vector_database", "milvus", "search"]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

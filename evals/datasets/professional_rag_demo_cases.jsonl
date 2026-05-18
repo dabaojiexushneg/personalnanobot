@@ -1,0 +1,6 @@
+{"id":"professional_broadband_bill","assistant_id":"consult","query":"家庭网费要提前哪一天上午几点提醒，为什么不要扣费当天才发现异常？","expect_contains":["16 日上午 9 点","扣费当天","异常"],"expect_title_contains":"nanobot个人生活账号助手专业演示知识库","min_evidence":1}
+{"id":"professional_cloud_renewal","assistant_id":"consult","query":"云盘会员续费前多久提醒，容量低于多少可以降级？","expect_contains":["14 天","40%","降级"],"expect_title_contains":"nanobot个人生活账号助手专业演示知识库","min_evidence":1}
+{"id":"professional_account_priority","assistant_id":"consult","query":"为什么账号整理要先处理高风险账号？","expect_contains":["登录异常","异地登录","扣费遗漏"],"expect_title_contains":"nanobot个人生活账号助手专业演示知识库","min_evidence":1}
+{"id":"professional_material_flow","assistant_id":"consult","query":"帮我做小红书生活经验帖素材，应该先准备什么？","expect_contains":["标题","封面文字","正文"],"expect_title_contains":"nanobot个人生活账号助手专业演示知识库","min_evidence":1}
+{"id":"professional_pending_media","assistant_id":"consult","query":"微信发来的任意格式附件为什么不能马上让 AI 回答？","expect_contains":["pending media","不立即","文字指令"],"expect_title_contains":"nanobot个人生活账号助手专业演示知识库","min_evidence":1}
+{"id":"professional_trace_stop","assistant_id":"consult","query":"暂停生成在 Trace 里应该怎么观察取消过程？","expect_contains":["停止请求","取消","Trace"],"expect_title_contains":"nanobot个人生活账号助手专业演示知识库","min_evidence":1}

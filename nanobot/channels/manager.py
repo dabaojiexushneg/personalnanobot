@@ -145,6 +145,35 @@ class ChannelManager:
             except Exception as e:
                 logger.error("Error stopping {}: {}", name, e)
 
+    async def send_now(self, msg: OutboundMessage) -> None:
+        """Send one outbound message immediately and surface failures."""
+        channel = self.channels.get(msg.channel)
+        if not channel:
+            raise ValueError(f"Unknown channel: {msg.channel}")
+
+        max_attempts = max(self.config.channels.send_max_retries, 1)
+        last_error: Exception | None = None
+        for attempt in range(max_attempts):
+            try:
+                await self._send_once(channel, msg)
+                return
+            except asyncio.CancelledError:
+                raise
+            except (RuntimeError, ValueError):
+                raise
+            except Exception as exc:  # pragma: no cover - exercised by integration
+                last_error = exc
+                if attempt == max_attempts - 1:
+                    raise
+                delay = _SEND_RETRY_DELAYS[min(attempt, len(_SEND_RETRY_DELAYS) - 1)]
+                logger.warning(
+                    "Immediate send to {} failed (attempt {}/{}): {}, retrying in {}s",
+                    msg.channel, attempt + 1, max_attempts, type(exc).__name__, delay
+                )
+                await asyncio.sleep(delay)
+        if last_error is not None:  # pragma: no cover - defensive
+            raise last_error
+
     async def _dispatch_outbound(self) -> None:
         """Dispatch outbound messages to the appropriate channel."""
         logger.info("Outbound dispatcher started")

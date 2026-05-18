@@ -1,0 +1,31 @@
+services:
+  nanobot-gateway:
+    profiles:
+      - dev
+      - sandbox
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+
+  nanobot-api:
+    profiles:
+      - dev
+      - sandbox
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+
+  nanobot-cli:
+    profiles:
+      - cli
+      - dev
+      - sandbox
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined

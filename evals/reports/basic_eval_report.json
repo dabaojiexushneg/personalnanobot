@@ -1,0 +1,35 @@
+{
+  "suite": "basic_eval_cases",
+  "generated_at": "2026-04-23T11:30:00+08:00",
+  "dataset": "evals/datasets/basic_eval_cases.jsonl",
+  "base_url": "http://127.0.0.1:8711",
+  "passed": 4,
+  "total": 4,
+  "pass_rate": 100.0,
+  "metrics": [
+    {
+      "name": "普通问答稳定性",
+      "value": "PASS",
+      "detail": "问候与简短介绍场景通过，未出现 traceback 或系统异常文本。"
+    },
+    {
+      "name": "Milvus RAG 问答",
+      "value": "PASS",
+      "detail": "知识问答样本通过，能够返回与登录流程相关的文本。"
+    },
+    {
+      "name": "图片生成意图识别",
+      "value": "PASS",
+      "detail": "图片请求样本通过，主助手能识别并走生图路径。"
+    },
+    {
+      "name": "开发类模板输出",
+      "value": "PASS",
+      "detail": "开发日报模板样本通过，结构化输出符合预期。"
+    }
+  ],
+  "notes": [
+    "这是一组最小基础回归，不代表完整 AI 质量评测上限。",
+    "当前指标更偏 smoke/e2e 验证，后续可以扩展为更严格的 RAG 命中率与工具调用评测。"
+  ]
+}

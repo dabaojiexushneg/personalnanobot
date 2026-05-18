@@ -47,7 +47,7 @@ _COMPACTABLE_TOOLS = frozenset({
 _BACKFILL_CONTENT = "[Tool result unavailable — call was interrupted or lost]"
 
 
-
+#   定义一次 Agent 执行参数。
 @dataclass(slots=True)
 class AgentRunSpec:
     """Configuration for a single agent execution."""
@@ -74,7 +74,7 @@ class AgentRunSpec:
     checkpoint_callback: Any | None = None
     injection_callback: Any | None = None
 
-
+#   封装执行结果。
 @dataclass(slots=True)
 class AgentRunResult:
     """Outcome of a shared agent execution."""
@@ -88,7 +88,7 @@ class AgentRunResult:
     tool_events: list[dict[str, str]] = field(default_factory=list)
     had_injections: bool = False
 
-
+#   ReAct 执行引擎。
 class AgentRunner:
     """Run a tool-capable LLM loop without product-layer concerns."""
 
@@ -223,6 +223,7 @@ class AgentRunner:
             injected_messages = injected_messages[:_MAX_INJECTIONS_PER_TURN]
         return injected_messages
 
+#   执行模型推理、工具调用、结果回填循环。
     async def run(self, spec: AgentRunSpec) -> AgentRunResult:
         hook = spec.hook or AgentHook()
         messages = list(spec.initial_messages)
@@ -555,6 +556,7 @@ class AgentRunner:
             kwargs["reasoning_effort"] = spec.reasoning_effort
         return kwargs
 
+#   调用模型 provider。
     async def _request_model(
         self,
         spec: AgentRunSpec,
@@ -611,6 +613,7 @@ class AgentRunner:
             merged[key] = merged.get(key, 0) + value
         return merged
 
+#   批量执行工具调用。
     async def _execute_tools(
         self,
         spec: AgentRunSpec,
@@ -639,6 +642,7 @@ class AgentRunner:
                 fatal_error = error
         return results, events, fatal_error
 
+#   执行单个工具。
     async def _run_tool(
         self,
         spec: AgentRunSpec,
@@ -711,6 +715,7 @@ class AgentRunner:
             detail = detail[:120] + "..."
         return result, {"name": tool_call.name, "status": "ok", "detail": detail}, None
 
+#   写入运行 checkpoint。
     async def _emit_checkpoint(
         self,
         spec: AgentRunSpec,
@@ -836,6 +841,7 @@ class AgentRunner:
             offset += 1
         return updated
 
+#   压缩旧工具结果。
     @staticmethod
     def _microcompact(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Replace old compactable tool results with one-line summaries."""
@@ -883,6 +889,7 @@ class AgentRunner:
                 updated[idx]["content"] = normalized
         return updated
 
+#   裁剪超长上下文。
     def _snip_history(
         self,
         spec: AgentRunSpec,
@@ -942,6 +949,7 @@ class AgentRunner:
                 kept = kept[start:]
         return system_messages + kept
 
+#   拆分并发/串行工具批次。
     def _partition_tool_batches(
         self,
         spec: AgentRunSpec,

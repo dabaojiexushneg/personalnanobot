@@ -149,6 +149,40 @@ async def test_exec_blocks_absolute_rm_via_hijacked_working_dir(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_exec_allows_absolute_paths_in_extra_allowed_dir(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    desktop = tmp_path / "Desktop"
+    desktop.mkdir()
+
+    tool = ExecTool(
+        working_dir=str(workspace),
+        restrict_to_workspace=True,
+        extra_allowed_dirs=[desktop],
+    )
+    result = await tool.execute(command=f"echo ok > {desktop / 'note.txt'}")
+
+    assert "outside working dir" not in result
+    assert (desktop / "note.txt").exists()
+
+
+@pytest.mark.asyncio
+async def test_exec_blocks_env_var_path_outside_allowed_roots(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    home = tmp_path / "home"
+    documents = home / "Documents"
+    documents.mkdir(parents=True)
+    monkeypatch.setenv("USERPROFILE", str(home))
+
+    tool = ExecTool(working_dir=str(workspace), restrict_to_workspace=True)
+    result = await tool.execute(command=r"echo ok > %USERPROFILE%\Documents\note.txt")
+
+    assert "outside working dir" in result
+    assert not (documents / "note.txt").exists()
+
+
+@pytest.mark.asyncio
 async def test_exec_allows_working_dir_within_workspace(tmp_path):
     """A working_dir that is a subdirectory of the workspace is fine."""
     workspace = tmp_path / "workspace"

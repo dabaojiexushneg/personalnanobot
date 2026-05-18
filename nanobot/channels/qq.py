@@ -102,6 +102,69 @@ def _guess_send_file_type(filename: str) -> int:
     return QQ_FILE_TYPE_FILE
 
 
+def _field_value(obj: Any, *names: str) -> Any:
+    """Read a field from botpy objects or dict-like attachment payloads."""
+    for name in names:
+        if isinstance(obj, dict) and name in obj:
+            return obj.get(name)
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    return None
+
+
+def _nested_field_value(obj: Any, *paths: tuple[str, ...]) -> Any:
+    """Read common nested attachment fields across botpy versions."""
+    for path in paths:
+        current = obj
+        for name in path:
+            current = _field_value(current, name)
+            if current in (None, ""):
+                break
+        else:
+            if current not in (None, ""):
+                return current
+    return None
+
+
+def _attachment_info(att: Any) -> tuple[str, str, str]:
+    """Normalize QQ attachment url/filename/content-type variants."""
+    # QQ/botpy 对文件字段命名不稳定；这里尽量兼容不同结构，支持任意附件格式下载。
+    url = _nested_field_value(
+        att,
+        ("url",),
+        ("download_url",),
+        ("downloadUrl",),
+        ("file_url",),
+        ("fileUrl",),
+        ("href",),
+        ("file_info", "url"),
+        ("file_info", "download_url"),
+        ("fileInfo", "url"),
+        ("fileInfo", "downloadUrl"),
+    )
+    filename = _nested_field_value(
+        att,
+        ("filename",),
+        ("file_name",),
+        ("fileName",),
+        ("name",),
+        ("file_info", "filename"),
+        ("file_info", "file_name"),
+        ("fileInfo", "fileName"),
+        ("fileInfo", "name"),
+    )
+    ctype = _nested_field_value(
+        att,
+        ("content_type",),
+        ("contentType",),
+        ("mime_type",),
+        ("mimeType",),
+        ("file_info", "content_type"),
+        ("fileInfo", "contentType"),
+    )
+    return str(url or "").strip(), str(filename or "").strip(), str(ctype or "").strip()
+
+
 def _make_bot_class(channel: QQChannel) -> type[botpy.Client]:
     """Create a botpy Client subclass bound to the given channel."""
     intents = botpy.Intents(public_messages=True, direct_message=True)
@@ -244,8 +307,7 @@ class QQChannel(BaseChannel):
         """Send attachments first, then text."""
         try:
             if not self._client:
-                logger.warning("QQ client not initialized")
-                return
+                raise RuntimeError("QQ client not initialized")
 
             msg_id = msg.metadata.get("message_id")
             chat_type = self._chat_type_cache.get(msg.chat_id, "c2c")
@@ -285,6 +347,7 @@ class QQChannel(BaseChannel):
             raise
         except Exception:
             logger.exception("Error sending QQ message to chat_id={}", msg.chat_id)
+            return
 
     async def _send_text_only(
         self,
@@ -552,9 +615,7 @@ class QQChannel(BaseChannel):
             return media_paths, recv_lines, att_meta
 
         for att in attachments:
-            url = getattr(att, "url", None) or ""
-            filename = getattr(att, "filename", None) or ""
-            ctype = getattr(att, "content_type", None) or ""
+            url, filename, ctype = _attachment_info(att)
 
             logger.info("Downloading file from QQ: {}", filename or url)
             local_path = await self._download_to_media_dir_chunked(url, filename_hint=filename)
@@ -592,6 +653,9 @@ class QQChannel(BaseChannel):
         # Handle protocol-relative URLs (e.g. "//multimedia.nt.qq.com/...")
         if url.startswith("//"):
             url = f"https:{url}"
+        if not url:
+            logger.warning("QQ attachment download skipped: empty url filename={}", filename_hint)
+            return None
 
         if not self._http:
             self._http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120))

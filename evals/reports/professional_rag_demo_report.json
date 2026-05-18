@@ -1,0 +1,160 @@
+{
+  "suite": "rag_quality",
+  "generated_at": "2026-05-16T11:12:51.364729+08:00",
+  "dataset": "D:\\agent\\nanobot\\evals\\datasets\\professional_rag_demo_cases.jsonl",
+  "passed": 6,
+  "total": 6,
+  "pass_rate": 100.0,
+  "cases": [
+    {
+      "id": "professional_broadband_bill",
+      "ok": true,
+      "failures": [],
+      "top_title": "nanobot个人生活账号助手专业演示知识库",
+      "top_chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:2",
+      "score": 0.2012924325219407,
+      "rerank_score": 0.14045454545454544,
+      "evidence_sentences": [
+        "家庭宽带扣费规则：家庭宽带每月 18 日扣费，套餐名称为“千兆家庭融合演示版”。",
+        "提醒时间建议设置为每月 16 日上午 9 点，避免扣费当天才发现异常。",
+        "如果出现异地登录提醒，优先操作顺序是修改密码、退出陌生设备、检查家庭成员设备列表、关闭非必要自动续费。"
+      ],
+      "citation": {
+        "title": "nanobot个人生活账号助手专业演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_111048_556465_demo_professional_life_account_knowledge.md",
+        "document_id": "7cd64136-9aaf-4444-a40e-434b359886dd",
+        "chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:2",
+        "chunk_index": 2,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    },
+    {
+      "id": "professional_cloud_renewal",
+      "ok": true,
+      "failures": [],
+      "top_title": "nanobot个人生活账号助手专业演示知识库",
+      "top_chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:2",
+      "score": 0.21210446633876176,
+      "rerank_score": 0.1508918918918919,
+      "evidence_sentences": [
+        "云盘会员续费规则：云盘会员每年 6 月 12 日续费，主要用于照片、项目文档和重要资料备份。",
+        "续费前 14 天提醒用户检查容量使用率，如果容量使用率低于 40%，可以建议降级套餐；",
+        "音乐会员续费规则：音乐会员每季度第一个月 3 日续费。"
+      ],
+      "citation": {
+        "title": "nanobot个人生活账号助手专业演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_111048_556465_demo_professional_life_account_knowledge.md",
+        "document_id": "7cd64136-9aaf-4444-a40e-434b359886dd",
+        "chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:2",
+        "chunk_index": 2,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    },
+    {
+      "id": "professional_account_priority",
+      "ok": true,
+      "failures": [],
+      "top_title": "nanobot个人生活账号助手专业演示知识库",
+      "top_chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:1",
+      "score": 0.19649122955038262,
+      "rerank_score": 0.149,
+      "evidence_sentences": [
+        "它不负责保存敏感密码，也不能代替用户完成高风险决策。",
+        "账号整理优先级固定为：安全风险 > 即将到期 > 高频使用 > 可自动化提醒 > 低频归档。",
+        "如果用户问“账号先整理什么”，应优先回答这条优先级，并说明高风险账号先处理是为了避免登录异常、异地登录和扣费遗漏。"
+      ],
+      "citation": {
+        "title": "nanobot个人生活账号助手专业演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_111048_556465_demo_professional_life_account_knowledge.md",
+        "document_id": "7cd64136-9aaf-4444-a40e-434b359886dd",
+        "chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:1",
+        "chunk_index": 1,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    },
+    {
+      "id": "professional_material_flow",
+      "ok": true,
+      "failures": [],
+      "top_title": "nanobot个人生活账号助手专业演示知识库",
+      "top_chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:3",
+      "score": 0.18210242818920694,
+      "rerank_score": 0.137,
+      "evidence_sentences": [
+        "素材生成助手用于处理生活账号相关的图片、文案和短视频脚本。",
+        "小红书素材规则：如果用户要发生活经验帖，优先生成标题、封面文字、正文分段和标签。",
+        "素材优先级规则：生活账号类内容生成时，优先准备“标题和封面文字”，其次准备“正文结构”，最后补充“标签"
+      ],
+      "citation": {
+        "title": "nanobot个人生活账号助手专业演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_111048_556465_demo_professional_life_account_knowledge.md",
+        "document_id": "7cd64136-9aaf-4444-a40e-434b359886dd",
+        "chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:3",
+        "chunk_index": 3,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    },
+    {
+      "id": "professional_pending_media",
+      "ok": true,
+      "failures": [],
+      "top_title": "nanobot个人生活账号助手专业演示知识库",
+      "top_chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:5",
+      "score": 0.15099796133751991,
+      "rerank_score": 0.10616216216216216,
+      "evidence_sentences": [
+        "缩包或其他任意格式附件时，系统应先把附件登记到 pending media 队列，不立即调用大模型回答。",
+        "任意格式附件都可按二进制文件保存和复制；",
+        "演示问题：“我刚刚在微信发了一个 Word 文档，帮我复制到电脑桌面。"
+      ],
+      "citation": {
+        "title": "nanobot个人生活账号助手专业演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_111048_556465_demo_professional_life_account_knowledge.md",
+        "document_id": "7cd64136-9aaf-4444-a40e-434b359886dd",
+        "chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:5",
+        "chunk_index": 5,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    },
+    {
+      "id": "professional_trace_stop",
+      "ok": true,
+      "failures": [],
+      "top_title": "nanobot个人生活账号助手专业演示知识库",
+      "top_chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:5",
+      "score": 0.12888291553031717,
+      "rerank_score": 0.086,
+      "evidence_sentences": [
+        "## 9. 暂停生成与 Trace 规则",
+        "Web 控制台支持暂停生成。",
+        "用户点击“暂停生成”后，前端向后端发送停止请求，后端根据 channel 和 session_id 找到正在运行的生成任务并取消。"
+      ],
+      "citation": {
+        "title": "nanobot个人生活账号助手专业演示知识库",
+        "filename": "C:\\Users\\Lenovo\\.nanobot\\cluster\\knowledge_uploads\\20260516_111048_556465_demo_professional_life_account_knowledge.md",
+        "document_id": "7cd64136-9aaf-4444-a40e-434b359886dd",
+        "chunk_id": "7cd64136-9aaf-4444-a40e-434b359886dd:5",
+        "chunk_index": 5,
+        "retrieval": [
+          "bm25",
+          "vector"
+        ]
+      }
+    }
+  ]
+}
