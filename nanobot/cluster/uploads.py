@@ -106,6 +106,15 @@ async def persist_uploads(
                     raw=bytes(content),
                 )
             )
+        """
+        失败自动回滚
+        只要上传过程中任何一步报错：
+            所有已经上传的文件 全部自动删除
+            不会残留垃圾文件
+            不会占磁盘空间
+            系统永远干净
+        这是生产级必须具备的机制。
+        """
     except Exception:
         for item in buffered:
             item.path.unlink(missing_ok=True)
