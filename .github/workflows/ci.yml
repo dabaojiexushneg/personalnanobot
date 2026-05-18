@@ -21,14 +21,35 @@ jobs:
     - name: Install uv
       uses: astral-sh/setup-uv@v4
 
+    - name: Set up Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+
     - name: Install system dependencies
       run: sudo apt-get update && sudo apt-get install -y libolm-dev build-essential
 
     - name: Install dependencies
       run: uv sync --all-extras
 
+    - name: Install frontend dependencies
+      run: npm ci
+
     - name: Ruff
       run: uv run ruff check .
+
+    - name: Frontend unit tests
+      run: npm run test:web:unit
+
+    - name: Frontend build
+      run: npm run build:web
+
+    - name: Install Playwright browser
+      run: npx playwright install --with-deps chromium
+
+    - name: Frontend E2E smoke tests
+      run: npm run test:web:e2e
 
     - name: Build packages
       run: uv run python -m build --sdist --wheel

@@ -1960,4 +1960,30 @@ function mergeUploads(existing, incoming) {
   return Array.from(map.values());
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+const rootElement = document.getElementById("root");
+if (rootElement) {
+  createRoot(rootElement).render(<App />);
+}
+
+export {
+  buildDefaultLayout,
+  boundLayoutToGrid,
+  can,
+  chLabel,
+  clamp,
+  defaultTaskForm,
+  formToAssistant,
+  isUsableSavedLayout,
+  knowledgeDocId,
+  layoutHasOverlap,
+  mergeUploads,
+  normalizeLayout,
+  parseCsv,
+  pickEvidenceSnippet,
+  sameLayout,
+  shouldShowQueryRewrite,
+  splitEvidenceSentences,
+  swapCardSlots,
+  taskFormPayload,
+  tokenizeQuery,
+};

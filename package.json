@@ -3,13 +3,25 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
-    "build:web": "esbuild web/react-src/main.jsx --bundle --format=esm --outfile=web/react-console.js --jsx=automatic --loader:.js=jsx --define:process.env.NODE_ENV=\\\"production\\\""
+    "build:web": "esbuild web/react-src/main.jsx --bundle --format=esm --outfile=web/react-console.js --jsx=automatic --loader:.js=jsx --define:process.env.NODE_ENV=\\\"production\\\"",
+    "test:web:unit": "vitest run",
+    "test:web:e2e": "playwright test --project=chromium --grep-invert @visual",
+    "test:web:visual": "playwright test --project=chromium --grep @visual",
+    "test:web": "npm run test:web:unit && npm run build:web && npm run test:web:e2e"
   },
   "dependencies": {
     "esbuild": "^0.27.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-grid-layout": "^1.5.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.6"
   }
 }

@@ -40,6 +40,8 @@ share/python-wheels/
 htmlcov/
 coverage.xml
 *.cover
+test-results/
+playwright-report/
 
 # Lock files (project policy)
 poetry.lock

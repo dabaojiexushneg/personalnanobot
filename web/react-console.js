@@ -14373,7 +14373,32 @@ function mergeUploads(existing, incoming) {
   incoming.forEach((item) => map.set(item.path, item));
   return Array.from(map.values());
 }
-(0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}));
+var rootElement = document.getElementById("root");
+if (rootElement) {
+  (0, import_client.createRoot)(rootElement).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}));
+}
+export {
+  boundLayoutToGrid,
+  buildDefaultLayout,
+  can,
+  chLabel,
+  clamp,
+  defaultTaskForm,
+  formToAssistant,
+  isUsableSavedLayout,
+  knowledgeDocId,
+  layoutHasOverlap,
+  mergeUploads,
+  normalizeLayout,
+  parseCsv,
+  pickEvidenceSnippet,
+  sameLayout,
+  shouldShowQueryRewrite,
+  splitEvidenceSentences,
+  swapCardSlots,
+  taskFormPayload,
+  tokenizeQuery
+};
 /*! Bundled license information:
 
 react/cjs/react.production.min.js:

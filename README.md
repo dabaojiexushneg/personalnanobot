@@ -547,6 +547,30 @@ python evals/runner.py \
 
 ## 本地开发与验证
 
+前端单元测试：
+
+```bash
+npm run test:web:unit
+```
+
+前端 E2E 冒烟测试：
+
+```bash
+npm run test:web:e2e
+```
+
+前端视觉回归测试：
+
+```bash
+npm run test:web:visual
+```
+
+完整前端检查：
+
+```bash
+npm run test:web
+```
+
 静态检查：
 
 ```bash
