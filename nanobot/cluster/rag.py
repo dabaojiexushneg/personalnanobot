@@ -295,9 +295,8 @@ def _answerability_score(query: str, content: str) -> float:
     return score
 
 #   Milvus 知识库核心类。
-class MilvusKnowledgeStore:
     """Milvus-backed hybrid knowledge store for RAG."""
-
+class MilvusKnowledgeStore:
     def __init__(
         self,
         rag_config: ClusterRagConfig | None = None,

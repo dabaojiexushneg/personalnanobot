@@ -120,14 +120,33 @@ class _LoopHook(AgentHook):
 #   单助手业务编排层。
 class AgentLoop:
     """
-    The agent loop is the core processing engine.
+    AgentLoop 是一个生产级异步 AI 代理运行时，实现了完整的 "思考 - 行动 - 观察" 代理循环：
+    1.从消息总线接收用户消息
+    2.整合历史对话、记忆、知识库和工具定义构建完整上下文
+    3.调用大模型生成响应或工具调用指令
+    4.安全执行工具调用并获取结果
+    5.将结果返回给用户，同时更新会话状态和记忆
+    6.支持多轮迭代、子代理协作、定时任务和 MCP 扩展
 
-    It:
-    1. Receives messages from the bus
-    2. Builds context with history, memory, skills
-    3. Calls the LLM
-    4. Executes tool calls
-    5. Sends responses back
+        用户发送消息
+        ↓
+    FastAPI接口
+        ↓
+    MessageBus（消息总线）
+        ↓
+    AgentLoop（核心引擎）
+        ↓
+    ├─ ContextBuilder → 构建上下文（历史+记忆+知识库+工具）
+    ├─ AgentRunner → 执行代理循环
+    │  ├─ 调用LLMProvider → 获取模型响应
+    │  ├─ 解析工具调用
+    │  └─ 调用ToolRegistry → 执行工具
+    ├─ Consolidator → 压缩上下文（如果需要）
+    └─ 更新SessionManager → 保存会话状态
+        ↓
+    MessageBus（发送响应）
+        ↓
+    前端接收响应
     """
 
     _RUNTIME_CHECKPOINT_KEY = "runtime_checkpoint"
@@ -139,24 +158,39 @@ class AgentLoop:
         provider: LLMProvider,
         workspace: Path,
         model: str | None = None,
+        #   单轮对话最多执行的工具调用次数，防止无限循环（默认10次）
         max_iterations: int | None = None,
+        #   上下文窗口大小，超过会自动压缩
         context_window_tokens: int | None = None,
         context_block_limit: int | None = None,
+        #   工具返回结果的最大长度，防止上下文溢出
         max_tool_result_chars: int | None = None,
+        #   大模型调用失败时的重试策略
         provider_retry_mode: str = "standard",
+        #   网页浏览工具的配置（代理、超时、白名单等）
         web_config: WebToolsConfig | None = None,
+        #   代码执行工具的配置（超时、允许的命令、资源限制等）
         exec_config: ExecToolConfig | None = None,
+        #   定时任务服务，支持代理创建定时任务
         cron_service: CronService | None = None,
+        #   是否限制所有文件操作只能在工作目录内进行
         restrict_to_workspace: bool = False,
+        #   会话状态持久化管理器
         session_manager: SessionManager | None = None,
+        #   MCP 服务器配置，支持 Model Context Protocol 扩展服务器
         mcp_servers: dict | None = None,
         channels_config: ChannelsConfig | None = None,
+        #   系统时区，代理使用的时区，影响时间相关的工具和功能
         timezone: str | None = None,
+        #   会话过期时间（分钟），0 表示永不过期
         session_ttl_minutes: int = 0,
+        #   钩子列表，代理生命周期钩子，可以在消息处理的各个阶段插入自定义逻辑
         hooks: list[AgentHook] | None = None,
+        #   是否使用统一会话模式（所有用户共享一个会话）
         unified_session: bool = False,
         disabled_skills: list[str] | None = None,
         allowed_skills: list[str] | None = None,
+        #   记忆存储，长期记忆存储后端
         memory_store: MemoryStore | None = None,
         context_builder: ContextBuilder | None = None,
         extra_read_dirs: list[Path] | None = None,
@@ -164,6 +198,13 @@ class AgentLoop:
         from nanobot.config.schema import ExecToolConfig, WebToolsConfig
 
         defaults = AgentDefaults()
+        """
+            消息总线 self.bus:
+                1.系统内部的发布 - 订阅消息系统
+                2.所有用户消息通过总线发送给代理
+                3.所有代理响应、状态更新、错误信息也通过总线发送
+                4.实现了前端和后端的完全解耦
+        """
         self.bus = bus
         self.channels_config = channels_config
         self.provider = provider
@@ -192,7 +233,17 @@ class AgentLoop:
         self._last_usage: dict[str, int] = {}
         self._extra_hooks: list[AgentHook] = hooks or []
         self._extra_read_dirs = extra_read_dirs or []
-
+        """
+        上下文构建器 self.context代理的 "记忆中枢"
+        负责整合以下所有信息构建最终的 prompt：
+        1.系统提示词
+        2.历史对话记录
+        3.长期记忆
+        4.知识库内容（RAG）
+        5.可用工具定义
+        6.当前时间和环境信息
+        自动处理上下文窗口溢出，进行智能压缩
+        """
         self.context = context_builder or ContextBuilder(
             workspace,
             timezone=timezone,
@@ -200,9 +251,37 @@ class AgentLoop:
             allowed_skills=allowed_skills,
             memory_store=memory_store,
         )
+        """
+        会话管理器 self.sessions
+        1.负责所有会话状态的持久化和加载
+        2.每个会话有独立的状态、历史和记忆
+        3.支持会话的导入、导出和删除
+        4.与 AutoCompact 配合自动清理过期会话
+        """
         self.sessions = session_manager or SessionManager(workspace)
+        """
+        工具注册中心 self.tools
+        1.所有可用工具的注册和管理中心
+        2.提供工具定义的自动生成
+        3.负责工具调用的参数校验和安全检查
+        4.支持动态注册和注销工具
+        """
         self.tools = ToolRegistry()
+        """
+        代理执行器 self.runner
+        1.实际执行 "思考 - 行动 - 观察" 循环的核心组件
+        2.负责调用大模型、解析工具调用、执行工具
+        3.处理多轮工具调用迭代
+        4.实现了完善的错误处理和超时控制
+        """
         self.runner = AgentRunner(provider)
+        """
+        子代理管理器 self.subagents
+        1.支持多代理协作模式
+        2.可以创建专门处理特定任务的子代理
+        3.负责子代理的生命周期管理和通信
+        4.实现了任务分解和结果汇总
+        """
         self.subagents = SubagentManager(
             provider=provider,
             workspace=workspace,
@@ -220,18 +299,51 @@ class AgentLoop:
         self._mcp_stacks: dict[str, AsyncExitStack] = {}
         self._mcp_connected = False
         self._mcp_connecting = False
+        """
+        任务管理器 self._active_tasks 和 self._background_tasks
+        1.跟踪所有正在运行的异步任务
+        2.可以在需要时取消任务（如用户点击 "停止生成"）
+        3.防止任务泄漏
+        4.系统关闭时可以优雅地等待所有任务完成
+        """
         self._active_tasks: dict[str, list[asyncio.Task]] = {}  # session_key -> tasks
         self._background_tasks: list[asyncio.Task] = []
+        """
+        会话级串行执行 self._session_locks
+        1.每个会话有自己独立的异步锁
+        2.保证同一个会话的请求永远串行执行
+        3.彻底解决了同一个会话的消息乱序和状态混乱问题
+        4.与之前的 _session_lock 机制完全一致
+        """
         self._session_locks: dict[str, asyncio.Lock] = {}
         # Per-session pending queues for mid-turn message injection.
         # When a session has an active task, new messages for that session
         # are routed here instead of creating a new task.
+        """
+        会话内消息队列 self._pending_queues
+        1.当一个会话正在处理请求时，新的消息会进入这个队列
+        2.而不是创建一个新的任务
+        3.保证消息按到达顺序处理
+        4.支持 "打断" 功能：用户可以在代理生成过程中发送新消息
+        """
         self._pending_queues: dict[str, asyncio.Queue] = {}
-        # NANOBOT_MAX_CONCURRENT_REQUESTS: <=0 means unlimited; default 3.
+        """
+        全局并发控制 self._concurrency_gate
+        1.使用 asyncio.Semaphore 控制全局最大并发请求数
+        2.默认值 3 是一个保守的安全值，可以根据服务器性能调整
+        3.防止大模型 API 被打爆，也防止服务器资源耗尽
+        """
         _max = int(os.environ.get("NANOBOT_MAX_CONCURRENT_REQUESTS", "3"))
         self._concurrency_gate: asyncio.Semaphore | None = (
             asyncio.Semaphore(_max) if _max > 0 else None
         )
+        """
+        上下文压缩器 self.consolidator
+        1.当上下文超过窗口大小时，自动压缩历史对话
+        2.使用大模型对历史对话进行摘要和提炼
+        3.保留最重要的信息，丢弃冗余内容
+        4.保证代理永远不会因为上下文过长而崩溃
+        """
         self.consolidator = Consolidator(
             store=self.context.memory,
             provider=provider,
@@ -242,11 +354,25 @@ class AgentLoop:
             get_tool_definitions=self.tools.get_definitions,
             max_completion_tokens=provider.generation.max_tokens,
         )
+        """
+        自动会话清理 self.auto_compact
+        1.后台运行的守护任务
+        2.自动清理超过 TTL 的过期会话
+        3.释放内存和磁盘空间
+        4.可以配置清理频率和策略
+        """
         self.auto_compact = AutoCompact(
             sessions=self.sessions,
             consolidator=self.consolidator,
             session_ttl_minutes=session_ttl_minutes,
         )
+        """
+        离线记忆整合 self.dream
+        1.灵感来自人类的睡眠做梦过程
+        2.在系统空闲时，对长期记忆进行整合和提炼
+        3.提取重要信息，形成更高级别的知识
+        4.提升代理的长期记忆能力
+        """
         self.dream = Dream(
             store=self.context.memory,
             provider=provider,
@@ -298,6 +424,15 @@ class AgentLoop:
                 )
             )
         self.tools.register(NotebookEditTool(workspace=self.workspace, allowed_dir=allowed_dir))
+        """
+        代码执行工具
+        只有当exec_config.enable=True时才会注册
+        1.最高危的工具，允许 AI 代理执行任意系统命令
+        2.所有命令都在工作目录下执行
+        3.可以配置超时时间，防止命令无限运行
+        4.支持沙箱模式，进一步限制命令的权限
+        5.可以配置允许的环境变量，防止敏感信息泄露
+        """
         if self.exec_config.enable:
             self.tools.register(
                 ExecTool(
@@ -310,13 +445,44 @@ class AgentLoop:
                     extra_allowed_dirs=extra_write,
                 )
             )
+        """
+        网络访问工具
+        只有当web_config.enable=True时才会注册
+        1.包含两个工具：
+        WebSearchTool：使用搜索引擎搜索网页
+        WebFetchTool：获取指定 URL 的网页内容
+        2.支持代理配置，适合需要翻墙的环境
+        3.可以配置搜索白名单、黑名单和结果数量限制
+        """
         if self.web_config.enable:
             self.tools.register(
                 WebSearchTool(config=self.web_config.search, proxy=self.web_config.proxy)
             )
             self.tools.register(WebFetchTool(proxy=self.web_config.proxy))
+        """
+        通信工具
+        1.允许 AI 代理主动向用户发送消息
+        2.绑定到消息总线的publish_outbound方法
+        3.支持流式输出、状态更新和错误提示
+        4.是代理与用户交互的唯一通道
+        """
         self.tools.register(MessageTool(send_callback=self.bus.publish_outbound))
+        """
+        子代理工具
+        1.允许 AI 代理创建子代理来处理复杂任务
+        2.子代理拥有与主代理相同的工具和权限
+        3.主代理可以将任务分解给多个子代理并行执行
+        4.子代理完成任务后会将结果返回给主代理
+        """
         self.tools.register(SpawnTool(manager=self.subagents))
+        """
+        定时任务工具
+        只有当传入了cron_service时才会注册
+        1.允许 AI 代理创建定时任务
+        2.支持标准的 Cron 表达式
+        例如："每天早上 9 点提醒我开会"
+        3.定时任务会持久化保存，服务重启后仍然有效
+        """
         if self.cron_service:
             self.tools.register(
                 CronTool(self.cron_service, default_timezone=self.context.timezone or "UTC")
@@ -344,7 +510,7 @@ class AgentLoop:
         finally:
             self._mcp_connecting = False
 
-#   给工具注入 channel、chat_id、message_id。
+#   上下文桥梁方法，解决"全局工具实例"与"请求级会话上下文"的矛盾，给工具注入 channel、chat_id、message_id。
     def _set_tool_context(self, channel: str, chat_id: str, message_id: str | None = None) -> None:
         """Update context for all tools that need routing info."""
         for name in ("message", "spawn", "cron"):
@@ -652,9 +818,42 @@ class AgentLoop:
         self._running = False
         logger.info("Agent loop stopping")
 
-#   处理完整入站消息。
+    """
+    _process_message 是一个异步安全的单条消息处理主方法：
+    1.统一处理用户消息和系统消息（子代理返回、定时任务触发等）
+    2.自动恢复崩溃的会话和运行时状态
+    3.优先处理斜杠命令
+    4.构建完整的对话上下文
+    5.执行 "思考 - 行动 - 观察" 代理循环
+    6.持久化会话状态和对话历史
+    7.返回标准化的响应消息
+    8.调度后台任务进行上下文压缩和记忆整合
+
+    收到消息
+        ↓
+    判断消息类型：系统消息 / 用户消息
+        ↓
+    获取或创建会话 → 恢复运行时检查点 → 恢复待处理用户轮次
+        ↓
+    自动准备会话 → 检查并压缩过长上下文
+        ↓
+    拦截并处理斜杠命令 → 命中则直接返回命令结果
+        ↓
+    注入工具上下文 → 启动消息轮次
+        ↓
+    提前持久化用户消息（崩溃恢复核心）
+        ↓
+    执行代理循环（调用LLM → 解析工具调用 → 执行工具 → 多轮迭代）
+        ↓
+    处理响应 → 保存对话轮次 → 清理临时状态
+        ↓
+    调度后台上下文压缩任务
+        ↓
+    返回最终响应（或None如果已通过MessageTool发送）
+    """
     async def _process_message(
         self,
+        #   入站消息,标准化的消息对象，包含内容、渠道、发送者、元数据等
         msg: InboundMessage,
         session_key: str | None = None,
         on_progress: Callable[[str], Awaitable[None]] | None = None,
@@ -663,7 +862,7 @@ class AgentLoop:
         pending_queue: asyncio.Queue | None = None,
     ) -> OutboundMessage | None:
         """Process a single inbound message and return the response."""
-        # System messages: parse origin from chat_id ("channel:chat_id")
+        #   分支 1：系统消息处理 ("channel:chat_id")
         if msg.channel == "system":
             channel, chat_id = (
                 msg.chat_id.split(":", 1) if ":" in msg.chat_id else ("cli", msg.chat_id)
@@ -671,51 +870,67 @@ class AgentLoop:
             logger.info("Processing system message from {}", msg.sender_id)
             key = f"{channel}:{chat_id}"
             session = self.sessions.get_or_create(key)
+            # 恢复运行时检查点
             if self._restore_runtime_checkpoint(session):
                 self.sessions.save(session)
+            # 恢复待处理用户轮次
             if self._restore_pending_user_turn(session):
                 self.sessions.save(session)
 
             session, pending = self.auto_compact.prepare_session(session, key)
 
             await self.consolidator.maybe_consolidate_by_tokens(session)
+            # 注入工具上下文
             self._set_tool_context(channel, chat_id, msg.metadata.get("message_id"))
             history = session.get_history(max_messages=0)
             current_role = "assistant" if msg.sender_id == "subagent" else "user"
-
+            # 构建上下文
             messages = self.context.build_messages(
                 history=history,
                 current_message=msg.content, channel=channel, chat_id=chat_id,
                 session_summary=pending,
                 current_role=current_role,
             )
+            # 执行代理循环
             final_content, _, all_msgs, _, _ = await self._run_agent_loop(
                 messages, session=session, channel=channel, chat_id=chat_id,
                 message_id=msg.metadata.get("message_id"),
             )
+            # 保存会话
             self._save_turn(session, all_msgs, 1 + len(history))
             self._clear_runtime_checkpoint(session)
             self.sessions.save(session)
             self._schedule_background(self.consolidator.maybe_consolidate_by_tokens(session))
+            # 返回响应
             return OutboundMessage(
                 channel=channel,
                 chat_id=chat_id,
                 content=self._prepare_outbound_content(final_content) or "Background task completed.",
             )
-
+        #   分支 2：普通用户消息处理（核心流程）
+        """
+        会话初始化与状态恢复
+        核心设计：崩溃恢复机制
+        1.如果服务在处理消息的过程中崩溃（OOM、SIGKILL、重启等），重启后会自动恢复到崩溃前的状态
+        2._restore_runtime_checkpoint：恢复代理循环的中间状态（已执行的工具调用、生成的部分响应等）
+        3._restore_pending_user_turn：恢复用户的原始提问
+        4.这是生产级系统与玩具项目的核心区别之一，保证用户的消息永远不会丢失
+        """
         preview = msg.content[:80] + "..." if len(msg.content) > 80 else msg.content
         logger.info("Processing message from {}:{}: {}", msg.channel, msg.sender_id, preview)
 
         key = session_key or msg.session_key
         session = self.sessions.get_or_create(key)
+        # 崩溃恢复：恢复运行时检查点
         if self._restore_runtime_checkpoint(session):
             self.sessions.save(session)
+        # 崩溃恢复：恢复待处理的用户轮次
         if self._restore_pending_user_turn(session):
             self.sessions.save(session)
-
+        # 自动准备会话（清理过期状态）
         session, pending = self.auto_compact.prepare_session(session, key)
 
-        # Slash commands
+        #  (2)斜杠命令拦截
         raw = msg.content.strip()
         ctx = CommandContext(msg=msg, session=session, key=key, raw=raw, loop=self)
         if result := await self.commands.dispatch(ctx):
@@ -1022,3 +1237,4 @@ class AgentLoop:
             on_stream=on_stream,
             on_stream_end=on_stream_end,
         )
+    
