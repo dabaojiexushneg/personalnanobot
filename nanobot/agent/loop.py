@@ -930,21 +930,27 @@ class AgentLoop:
         # 自动准备会话（清理过期状态）
         session, pending = self.auto_compact.prepare_session(session, key)
 
-        #  (2)斜杠命令拦截
+        """
+        斜杠命令拦截
+        优先处理以 / 开头的斜杠命令
+        如果命令命中，直接返回命令结果，不进入代理循环
+        常见命令：/clear（清空会话）、/help（帮助）、/status（系统状态）等
+        """
         raw = msg.content.strip()
         ctx = CommandContext(msg=msg, session=session, key=key, raw=raw, loop=self)
         if result := await self.commands.dispatch(ctx):
             return result
-
+        # 自动压缩过长的上下文
         await self.consolidator.maybe_consolidate_by_tokens(session)
-
+        # 注入工具上下文
         self._set_tool_context(msg.channel, msg.chat_id, msg.metadata.get("message_id"))
+        # 启动消息轮次，重置MessageTool的状态
         if message_tool := self.tools.get("message"):
             if isinstance(message_tool, MessageTool):
                 message_tool.start_turn()
-
+        # 获取历史对话
         history = session.get_history(max_messages=0)
-
+        # 构建完整的prompt上下文
         initial_messages = self.context.build_messages(
             history=history,
             current_message=msg.content,
@@ -953,7 +959,7 @@ class AgentLoop:
             channel=msg.channel,
             chat_id=msg.chat_id,
         )
-
+        # 定义进度回调，通过消息总线发送状态更新
         async def _bus_progress(content: str, *, tool_hint: bool = False) -> None:
             meta = dict(msg.metadata or {})
             meta["_progress"] = True
@@ -967,19 +973,30 @@ class AgentLoop:
                 )
             )
 
-        # Persist the triggering user message immediately, before running the
-        # agent loop. If the process is killed mid-turn (OOM, SIGKILL, self-
-        # restart, etc.), the existing runtime_checkpoint preserves the
-        # in-flight assistant/tool state but NOT the user message itself, so
-        # the user's prompt is silently lost on recovery. Saving it up front
-        # makes recovery possible from the session log alone.
+        """
+        核心安全设计：用户消息提前持久化
+        这是整个方法最关键的一行代码，也是工业级系统可靠性的核心保障：
+        1.在执行代理循环之前，就把用户的消息保存到会话中
+        2.如果服务在代理循环执行过程中崩溃，重启后可以从会话日志中恢复用户的消息
+        3.如果不这么做，用户的消息会在崩溃后永久丢失，用户需要重新输入
+        4._mark_pending_user_turn 标记这个轮次还没有完成，重启后会自动继续处理
+        """
         user_persisted_early = False
         if isinstance(msg.content, str) and msg.content.strip():
             session.add_message("user", msg.content)
             self._mark_pending_user_turn(session)
             self.sessions.save(session)
             user_persisted_early = True
-
+        """
+        执行代理循环
+        调用核心的 _run_agent_loop 方法执行 "思考 - 行动 - 观察" 循环
+        传递所有回调函数，支持流式输出和进度更新
+        返回值说明：
+        1.final_content：最终生成的响应内容
+        2.all_msgs：整个轮次生成的所有消息（用户消息、助手响应、工具调用、工具结果）
+        3.stop_reason：循环停止的原因（正常结束、达到最大迭代次数、错误等）
+        4.had_injections：是否在轮次中注入了新的消息（用户打断）
+        """
         final_content, _, all_msgs, stop_reason, had_injections = await self._run_agent_loop(
             initial_messages,
             on_progress=on_progress or _bus_progress,
@@ -991,30 +1008,38 @@ class AgentLoop:
             message_id=msg.metadata.get("message_id"),
             pending_queue=pending_queue,
         )
-
+        """
+        响应处理与会话保存
+        """
+        # 处理空响应
         if final_content is None or not final_content.strip():
             final_content = EMPTY_FINAL_RESPONSE_MESSAGE
         else:
             final_content = self._prepare_outbound_content(final_content) or EMPTY_FINAL_RESPONSE_MESSAGE
 
-        # Skip the already-persisted user message when saving the turn
+        # 保存对话轮次，跳过已经提前保存的用户消息
         save_skip = 1 + len(history) + (1 if user_persisted_early else 0)
         self._save_turn(session, all_msgs, save_skip)
+        # 清理临时状态
         self._clear_pending_user_turn(session)
         self._clear_runtime_checkpoint(session)
+        # 保存最终会话状态
         self.sessions.save(session)
+        # 调度后台任务，在空闲时压缩上下文
         self._schedule_background(self.consolidator.maybe_consolidate_by_tokens(session))
 
-        # When follow-up messages were injected mid-turn, a later natural
-        # language reply may address those follow-ups and should not be
-        # suppressed just because MessageTool was used earlier in the turn.
-        # However, if the turn falls back to the empty-final-response
-        # placeholder, suppress it when the real user-visible output already
-        # came from MessageTool.
+        """
+        空响应特殊逻辑
+        如果代理在执行过程中已经通过 MessageTool 主动发送了消息，就不需要再返回最终响应
+        但如果在轮次中用户注入了新的消息（打断了代理），仍然需要返回最终响应
+        避免重复发送相同的内容给用户
+        """
         if (mt := self.tools.get("message")) and isinstance(mt, MessageTool) and mt._sent_in_turn:
             if not had_injections or stop_reason == "empty_final_response":
                 return None
-
+        """
+        返回最终响应
+        """
         preview = final_content[:120] + "..." if len(final_content) > 120 else final_content
         logger.info("Response to {}:{}: {}", msg.channel, msg.sender_id, preview)
 
@@ -1144,16 +1169,30 @@ class AgentLoop:
 #   恢复中断的工具调用状态。
     def _restore_runtime_checkpoint(self, session: Session) -> bool:
         """Materialize an unfinished turn into session history before a new request."""
+        #   导入依赖与获取检查点数据
         from datetime import datetime
 
         checkpoint = session.metadata.get(self._RUNTIME_CHECKPOINT_KEY)
         if not isinstance(checkpoint, dict):
             return False
-
+        """
+        提取检查点中的状态数据
+        从检查点字典中提取三个核心状态字段：
+        1.assistant_message：上一次中断时助手生成的部分响应消息
+        2.completed_tool_results：上一次中断时已经完成的工具调用结果列表
+        3.pending_tool_calls：上一次中断时未完成的工具调用列表
+        4.为后两个字段设置默认值空列表，避免后续遍历时报错
+        """
         assistant_message = checkpoint.get("assistant_message")
         completed_tool_results = checkpoint.get("completed_tool_results") or []
         pending_tool_calls = checkpoint.get("pending_tool_calls") or []
-
+        """
+        构建待恢复的消息列表
+        初始化空列表restored_messages，用于存储最终要恢复到会话历史的消息
+        检查assistant_message是否为字典类型，若是则创建其副本
+        为副本添加默认的timestamp字段，值为当前时间的 ISO 格式字符串
+        将处理后的助手消息添加到待恢复列表
+        """
         restored_messages: list[dict[str, Any]] = []
         if isinstance(assistant_message, dict):
             restored = dict(assistant_message)
@@ -1227,9 +1266,15 @@ class AgentLoop:
         on_stream: Callable[[str], Awaitable[None]] | None = None,
         on_stream_end: Callable[..., Awaitable[None]] | None = None,
     ) -> OutboundMessage | None:
-        """Process a message directly and return the outbound payload."""
+        """
+            异步调用实例的_connect_mcp方法
+            确保所有配置的 MCP 扩展服务器已完成连接
+            若已连接则直接返回，不会重复执行连接操作
+        """
         await self._connect_mcp()
+        #   构建内部标准化消息对象
         msg = InboundMessage(channel=channel, sender_id="user", chat_id=chat_id, content=content)
+        #   调用核心处理方法并返回结果
         return await self._process_message(
             msg,
             session_key=session_key,

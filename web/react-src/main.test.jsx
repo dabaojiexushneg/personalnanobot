@@ -12,6 +12,7 @@ import {
   parseCsv,
   pickEvidenceSnippet,
   shouldShowQueryRewrite,
+  summarizeTokenUsage,
   taskFormPayload,
   tokenizeQuery,
 } from "./main.jsx";
@@ -124,5 +125,17 @@ describe("form and permission helpers", () => {
     expect(chLabel("qq")).toBe("QQ");
     expect(can({ role: "admin" }, "viewer")).toBe(true);
     expect(can({ role: "viewer" }, "admin")).toBe(false);
+  });
+
+  it("summarizes daily token usage for the status card", () => {
+    expect(summarizeTokenUsage([
+      { trace_count: 2, prompt_tokens: 120, completion_tokens: 30, total_tokens: 150 },
+      { trace_count: 1, prompt_tokens: 50, completion_tokens: 25, total_tokens: 75 },
+    ])).toEqual({
+      trace_count: 3,
+      prompt_tokens: 170,
+      completion_tokens: 55,
+      total_tokens: 225,
+    });
   });
 });

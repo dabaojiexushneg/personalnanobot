@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 from pathlib import Path
 import re
@@ -294,6 +294,18 @@ def create_cluster_app(cluster: AssistantCluster) -> FastAPI:
             "knowledge_chunks": 0,
         }
 
+    def _daily_token_usage_fallback(days: int = 14) -> list[dict[str, int | str]]:
+        return [
+            {
+                "date": (datetime.now().astimezone().date() - timedelta(days=offset)).isoformat(),
+                "trace_count": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            }
+            for offset in reversed(range(days))
+        ]
+
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
         return {"status": "ok", **_security_state()}
@@ -397,6 +409,17 @@ def create_cluster_app(cluster: AssistantCluster) -> FastAPI:
             "security": cluster.web_security_state(),
             "metrics": cluster.metrics.snapshot(),
         }
+
+    @app.get("/api/token-usage/daily")
+    async def daily_token_usage(
+        days: int = Query(default=14, ge=1, le=90),
+        user: dict[str, Any] = Depends(_require_role("viewer")),
+    ) -> list[dict[str, Any]]:
+        return await _to_thread_or_fallback(
+            "daily token usage",
+            lambda: cluster.daily_token_usage(days),
+            fallback=_daily_token_usage_fallback(days),
+        )
 
     @app.get("/api/assistants")
     async def list_assistants(user: dict[str, Any] = Depends(_require_role("viewer"))) -> list[dict[str, Any]]:

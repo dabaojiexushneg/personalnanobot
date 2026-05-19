@@ -159,6 +159,28 @@ nanobot/
 
 ---
 
+## 5.1 每日 Token 用量统计怎么讲
+
+如果面试官问：“你怎么体现每天修改和运行工程访问大模型消耗了多少 token？”
+
+可以先说明边界：
+
+> Codex 客户端本身目前没有把本轮工程修改消耗的总 token 暴露给项目，所以我不会把它伪装成精确统计。项目里真正可追踪的是业务运行时访问大模型 API 产生的 token，用 Trace 落库，再按天聚合展示；PPT 里的百万级数字可以作为演示样例，但必须标清楚是演示口径。
+
+项目内的实现方式：
+
+- `AgentLoop` / runner 从模型响应里读取 `usage`，包括 `prompt_tokens`、`completion_tokens`、`total_tokens`。
+- `ClusterControlStore.finalize_trace()` 把每次请求的 token 写入 SQLite 的 `traces` 表。
+- `ClusterControlStore.daily_token_usage()` 基于 Trace 统计访问大模型的 token 用量，支持按查询窗口聚合。
+- FastAPI 暴露 `/api/token-usage/daily?days=14`，前端控制台展示“访问大模型总 Token 消耗”，包含输入、输出和累计总 token。
+- 每个助手还支持 `daily_token_limit`，可以限制单个助手每天最多消耗多少 token。
+
+面试表达：
+
+> 我把访问大模型的 token 成本纳入了可观测体系，不是只在日志里看一眼。每次模型调用都会生成 Trace，Trace 里保存输入 token、输出 token 和总 token；控制台展示项目累计总 Token 消耗，帮助判断模型调用成本和使用规模。演示环境里我会放一组 500 万以上的样例数据说明看板效果，真实生产环境则以 Trace 里的 usage 为准。
+
+---
+
 ## 6. 多助手集群
 
 项目内置多个助手：

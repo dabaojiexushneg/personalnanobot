@@ -783,6 +783,41 @@ class ClusterControlStore:
             ).fetchone()
         return int(row["total"] or 0) if row else 0
 
+    def daily_token_usage(self, days: int = 14) -> list[dict[str, Any]]:
+        days = max(1, min(int(days or 14), 90))
+        end_date = _now().date()
+        start_date = end_date - timedelta(days=days - 1)
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT substr(started_at, 1, 10) AS usage_date,
+                       COUNT(*) AS trace_count,
+                       SUM(prompt_tokens) AS prompt_tokens,
+                       SUM(completion_tokens) AS completion_tokens,
+                       SUM(total_tokens) AS total_tokens
+                FROM traces
+                WHERE substr(started_at, 1, 10) >= ?
+                GROUP BY usage_date
+                ORDER BY usage_date ASC
+                """,
+                (start_date.isoformat(),),
+            ).fetchall()
+        by_date = {row["usage_date"]: row for row in rows}
+        items: list[dict[str, Any]] = []
+        for offset in range(days):
+            usage_date = (start_date + timedelta(days=offset)).isoformat()
+            row = by_date.get(usage_date)
+            items.append(
+                {
+                    "date": usage_date,
+                    "trace_count": int(row["trace_count"] or 0) if row else 0,
+                    "prompt_tokens": int(row["prompt_tokens"] or 0) if row else 0,
+                    "completion_tokens": int(row["completion_tokens"] or 0) if row else 0,
+                    "total_tokens": int(row["total_tokens"] or 0) if row else 0,
+                }
+            )
+        return items
+
     @staticmethod
     def _compute_next_run(
         schedule_kind: str,

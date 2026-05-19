@@ -432,6 +432,12 @@ def test_task_retry_and_daily_token_usage(tmp_path: Path) -> None:
     )
 
     assert store.assistant_token_usage_today("consult") == 150
+    daily_usage = store.daily_token_usage(days=7)
+    assert len(daily_usage) == 7
+    assert daily_usage[-1]["trace_count"] == 1
+    assert daily_usage[-1]["prompt_tokens"] == 120
+    assert daily_usage[-1]["completion_tokens"] == 30
+    assert daily_usage[-1]["total_tokens"] == 150
 
 
 def test_cron_task_next_run_is_generated(tmp_path: Path) -> None:

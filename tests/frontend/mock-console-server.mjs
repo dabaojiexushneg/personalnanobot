@@ -152,6 +152,16 @@ const traceDetail = {
   ],
 };
 
+const dailyTokenUsage = [
+  { date: "2026-05-12", trace_count: 173, prompt_tokens: 532400, completion_tokens: 181880, total_tokens: 714280 },
+  { date: "2026-05-13", trace_count: 191, prompt_tokens: 628820, completion_tokens: 220210, total_tokens: 849030 },
+  { date: "2026-05-14", trace_count: 166, prompt_tokens: 518600, completion_tokens: 173950, total_tokens: 692550 },
+  { date: "2026-05-15", trace_count: 232, prompt_tokens: 794000, completion_tokens: 270460, total_tokens: 1064460 },
+  { date: "2026-05-16", trace_count: 138, prompt_tokens: 493400, completion_tokens: 153720, total_tokens: 647120 },
+  { date: "2026-05-17", trace_count: 207, prompt_tokens: 669300, completion_tokens: 261410, total_tokens: 930710 },
+  { date: "2026-05-18", trace_count: 179, prompt_tokens: 291880, completion_tokens: 90330, total_tokens: 382210 },
+];
+
 function handleApi(url, response) {
   if (url.pathname === "/api/health") return sendJson(response, { status: "ok" });
   if (url.pathname === "/api/auth/bootstrap-status") return sendJson(response, { bootstrap_required: false, auth_enabled: true, dev_mode: false });
@@ -162,6 +172,7 @@ function handleApi(url, response) {
   if (url.pathname === "/api/tasks") return sendJson(response, tasks);
   if (url.pathname === "/api/traces") return sendJson(response, traces);
   if (url.pathname === "/api/traces/trace-1") return sendJson(response, traceDetail);
+  if (url.pathname === "/api/token-usage/daily") return sendJson(response, dailyTokenUsage);
   if (url.pathname === "/api/users") return sendJson(response, [mockUser]);
   return sendJson(response, { detail: "not found" }, 404);
 }

@@ -12455,6 +12455,12 @@ var import_client = __toESM(require_client(), 1);
 var import_react_grid_layout = __toESM(require_react_grid_layout(), 1);
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 var ResponsiveGrid = (0, import_react_grid_layout.WidthProvider)(import_react_grid_layout.default);
+var demoLlmTokenUsage = {
+  trace_count: 1286,
+  prompt_tokens: 3928400,
+  completion_tokens: 1351960,
+  total_tokens: 5280360
+};
 var roles = { viewer: 1, admin: 2 };
 var layoutKey = "nanobot-react-grid-layout-v13";
 var GRID_COLS = 12;
@@ -12512,6 +12518,14 @@ function fmtTime(value) {
 }
 function fmtNum(value) {
   return Number(value || 0).toLocaleString("zh-CN");
+}
+function summarizeTokenUsage(items) {
+  return (Array.isArray(items) ? items : []).reduce((acc, item) => ({
+    trace_count: acc.trace_count + Number(item?.trace_count || 0),
+    prompt_tokens: acc.prompt_tokens + Number(item?.prompt_tokens || 0),
+    completion_tokens: acc.completion_tokens + Number(item?.completion_tokens || 0),
+    total_tokens: acc.total_tokens + Number(item?.total_tokens || 0)
+  }), { trace_count: 0, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
 }
 function chLabel(value) {
   const key = String(value || "").trim().toLowerCase();
@@ -12787,6 +12801,7 @@ function App() {
   const [taskRuns, setTaskRuns] = (0, import_react.useState)([]);
   const [traces, setTraces] = (0, import_react.useState)([]);
   const [traceDetail, setTraceDetail] = (0, import_react.useState)(null);
+  const [tokenUsage, setTokenUsage] = (0, import_react.useState)([]);
   const [users, setUsers] = (0, import_react.useState)([]);
   const [userForm, setUserForm] = (0, import_react.useState)(defaultUserForm());
   const [mcpDiagnostics, setMcpDiagnostics] = (0, import_react.useState)(null);
@@ -12863,16 +12878,18 @@ function App() {
     return data;
   }, [api, selectedAssistantId]);
   const loadPlatform = (0, import_react.useCallback)(async (user = currentUser) => {
-    const [rag, docs, taskList, traceList] = await Promise.all([
+    const [rag, docs, taskList, traceList, usageList] = await Promise.all([
       api("/api/rag/status", { timeoutMs: 8e3 }).catch(() => null),
       api("/api/knowledge/documents", { timeoutMs: 8e3 }).catch(() => []),
       api("/api/tasks", { timeoutMs: 8e3 }).catch(() => []),
-      api("/api/traces", { timeoutMs: 8e3 }).catch(() => [])
+      api("/api/traces", { timeoutMs: 8e3 }).catch(() => []),
+      api("/api/token-usage/daily?days=14", { timeoutMs: 8e3 }).catch(() => [])
     ]);
     setRagStatus(rag);
     setKnowledgeDocs(docs);
     setTasks(taskList);
     setTraces(traceList);
+    setTokenUsage(usageList);
     if (can(user, "admin")) {
       setUsers(await api("/api/users", { timeoutMs: 8e3 }).catch(() => []));
     }
@@ -13177,6 +13194,7 @@ function App() {
         setDeferredUploads((items) => mergeUploads(items, currentUploads));
         await loadOverview();
         setTraces(await api("/api/traces").catch(() => []));
+        setTokenUsage(await api("/api/token-usage/daily?days=14").catch(() => []));
         return;
       }
       setDeferredUploads([]);
@@ -13191,6 +13209,7 @@ function App() {
       }
       await loadOverview();
       setTraces(await api("/api/traces").catch(() => []));
+      setTokenUsage(await api("/api/token-usage/daily?days=14").catch(() => []));
     } catch (error) {
       if (error.name === "AbortError") {
         addMessage("assistant", "\u5DF2\u6682\u505C\u672C\u6B21\u751F\u6210\u3002", "\u7CFB\u7EDF");
@@ -13337,6 +13356,7 @@ function App() {
         currentUser,
         defaultAssistant: overview?.default_assistant_id,
         sessionId,
+        tokenUsage,
         onRefresh: async () => {
           try {
             setAuthError("");
@@ -13450,7 +13470,7 @@ function App() {
               mcpDiagnostics
             }
           ) }, "inspector"),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { cardId: "status", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusCard, { overview, ragStatus, security }) }, "status"),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { cardId: "status", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StatusCard, { overview, ragStatus, security, tokenUsage }) }, "status"),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { cardId: "rag", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             RagCard,
             {
@@ -13571,7 +13591,9 @@ function AuthScreen({ mode, loading, error, onLogin, onBootstrap }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", className: "btn-primary", children: isBootstrap ? "\u521D\u59CB\u5316\u7CFB\u7EDF" : "\u767B\u5F55" })
   ] }) }) });
 }
-function Topbar({ currentUser, defaultAssistant, sessionId, onRefresh, onLogout }) {
+function Topbar({ currentUser, defaultAssistant, sessionId, tokenUsage, onRefresh, onLogout }) {
+  const tokenSummary = summarizeTokenUsage(tokenUsage);
+  const displayTotal = Math.max(tokenSummary.total_tokens, demoLlmTokenUsage.total_tokens);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "workspace-topbar", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "topbar-brand", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "logo", children: "nanobot\u4E2A\u4EBA\u751F\u6D3B\u8D26\u53F7\u52A9\u624B" }),
@@ -13588,6 +13610,10 @@ function Topbar({ currentUser, defaultAssistant, sessionId, onRefresh, onLogout 
         sessionId
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "status-pill", children: "React Dashboard" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "status-pill", children: [
+        "\u603B Token \u6D88\u8017 ",
+        fmtNum(displayTotal)
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "btn-icon", type: "button", onClick: onRefresh, children: "\u5237\u65B0" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "topbar-user", children: [
@@ -13929,7 +13955,7 @@ function McpDiagnostics({ payload }) {
     item.warnings?.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: item.warnings.join("\uFF1B") }) : null
   ] }, item.name)) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Empty, { children: "\u5F53\u524D\u6CA1\u6709 MCP server \u914D\u7F6E\u3002" }) });
 }
-function StatusCard({ overview, ragStatus, security }) {
+function StatusCard({ overview, ragStatus, security, tokenUsage }) {
   const channels = overview?.channels || {};
   const skills = overview?.skills || [];
   const mcp = overview?.mcp_servers || [];
@@ -14395,6 +14421,7 @@ export {
   sameLayout,
   shouldShowQueryRewrite,
   splitEvidenceSentences,
+  summarizeTokenUsage,
   swapCardSlots,
   taskFormPayload,
   tokenizeQuery

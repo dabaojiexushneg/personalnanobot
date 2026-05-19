@@ -101,6 +101,38 @@ def test_viewer_can_use_chat_endpoint(tmp_path: Path) -> None:
         assert "channel_sync" not in payload
 
 
+def test_daily_token_usage_api_returns_trace_summary(tmp_path: Path) -> None:
+    with make_dev_client(tmp_path) as client:
+        cluster = client.app.state.cluster
+        trace_id = cluster.control.create_trace(
+            session_id="web:test",
+            channel="web",
+            chat_id="web",
+            assistant_id="consult",
+            request_content="统计今天 token",
+        )
+        cluster.control.finalize_trace(
+            trace_id,
+            response_content="ok",
+            response_style="chat",
+            media_count=0,
+            status="completed",
+            prompt_tokens=10,
+            completion_tokens=5,
+            total_tokens=15,
+        )
+
+        res = client.get("/api/token-usage/daily?days=3")
+
+        assert res.status_code == 200, res.text
+        payload = res.json()
+        assert len(payload) == 3
+        assert payload[-1]["trace_count"] == 1
+        assert payload[-1]["prompt_tokens"] == 10
+        assert payload[-1]["completion_tokens"] == 5
+        assert payload[-1]["total_tokens"] == 15
+
+
 def test_assistant_versions_and_task_fields_roundtrip(tmp_path: Path) -> None:
     with make_dev_client(tmp_path) as client:
         assistant_payload = {

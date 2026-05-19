@@ -447,6 +447,12 @@ class AssistantCluster:
     def dashboard_summary(self) -> dict[str, Any]:
         return self.control.get_dashboard_summary()
 
+    def daily_token_usage(self, days: int = 14) -> list[dict[str, Any]]:
+        control = self._control_store()
+        if control is None:
+            return []
+        return control.daily_token_usage(days)
+
     def _control_store(self) -> ClusterControlStore | None:
         """Return the optional control store.
 

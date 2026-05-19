@@ -4,6 +4,13 @@ import GridLayout, { WidthProvider } from "react-grid-layout";
 
 const ResponsiveGrid = WidthProvider(GridLayout);
 
+const demoLlmTokenUsage = {
+  trace_count: 1286,
+  prompt_tokens: 3928400,
+  completion_tokens: 1351960,
+  total_tokens: 5280360,
+};
+
 const roles = { viewer: 1, admin: 2 };
 const layoutKey = "nanobot-react-grid-layout-v13";
 const GRID_COLS = 12;
@@ -70,6 +77,15 @@ function fmtTime(value) {
 
 function fmtNum(value) {
   return Number(value || 0).toLocaleString("zh-CN");
+}
+
+function summarizeTokenUsage(items) {
+  return (Array.isArray(items) ? items : []).reduce((acc, item) => ({
+    trace_count: acc.trace_count + Number(item?.trace_count || 0),
+    prompt_tokens: acc.prompt_tokens + Number(item?.prompt_tokens || 0),
+    completion_tokens: acc.completion_tokens + Number(item?.completion_tokens || 0),
+    total_tokens: acc.total_tokens + Number(item?.total_tokens || 0),
+  }), { trace_count: 0, prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 });
 }
 
 function chLabel(value) {
@@ -401,6 +417,7 @@ function App() {
   const [taskRuns, setTaskRuns] = useState([]);
   const [traces, setTraces] = useState([]);
   const [traceDetail, setTraceDetail] = useState(null);
+  const [tokenUsage, setTokenUsage] = useState([]);
   const [users, setUsers] = useState([]);
   const [userForm, setUserForm] = useState(defaultUserForm());
   const [mcpDiagnostics, setMcpDiagnostics] = useState(null);
@@ -482,16 +499,18 @@ function App() {
   }, [api, selectedAssistantId]);
 
   const loadPlatform = useCallback(async (user = currentUser) => {
-    const [rag, docs, taskList, traceList] = await Promise.all([
+    const [rag, docs, taskList, traceList, usageList] = await Promise.all([
       api("/api/rag/status", { timeoutMs: 8000 }).catch(() => null),
       api("/api/knowledge/documents", { timeoutMs: 8000 }).catch(() => []),
       api("/api/tasks", { timeoutMs: 8000 }).catch(() => []),
       api("/api/traces", { timeoutMs: 8000 }).catch(() => []),
+      api("/api/token-usage/daily?days=14", { timeoutMs: 8000 }).catch(() => []),
     ]);
     setRagStatus(rag);
     setKnowledgeDocs(docs);
     setTasks(taskList);
     setTraces(traceList);
+    setTokenUsage(usageList);
     if (can(user, "admin")) {
       setUsers(await api("/api/users", { timeoutMs: 8000 }).catch(() => []));
     }
@@ -831,6 +850,7 @@ function findSwapTarget(nextLayout, activeId, activeDragItem, event) {
         setDeferredUploads(items => mergeUploads(items, currentUploads));
         await loadOverview();
         setTraces(await api("/api/traces").catch(() => []));
+        setTokenUsage(await api("/api/token-usage/daily?days=14").catch(() => []));
         return;
       }
       setDeferredUploads([]);
@@ -845,6 +865,7 @@ function findSwapTarget(nextLayout, activeId, activeDragItem, event) {
       }
       await loadOverview();
       setTraces(await api("/api/traces").catch(() => []));
+      setTokenUsage(await api("/api/token-usage/daily?days=14").catch(() => []));
     } catch (error) {
       if (error.name === "AbortError") {
         addMessage("assistant", "已暂停本次生成。", "系统");
@@ -991,6 +1012,7 @@ function findSwapTarget(nextLayout, activeId, activeDragItem, event) {
         currentUser={currentUser}
         defaultAssistant={overview?.default_assistant_id}
         sessionId={sessionId}
+        tokenUsage={tokenUsage}
         onRefresh={async () => {
           try {
             setAuthError("");
@@ -1100,7 +1122,7 @@ function findSwapTarget(nextLayout, activeId, activeDragItem, event) {
             />
           </Card>
           <Card key="status" cardId="status">
-            <StatusCard overview={overview} ragStatus={ragStatus} security={security} />
+            <StatusCard overview={overview} ragStatus={ragStatus} security={security} tokenUsage={tokenUsage} />
           </Card>
           <Card key="rag" cardId="rag">
             <RagCard
@@ -1227,7 +1249,9 @@ function AuthScreen({ mode, loading, error, onLogin, onBootstrap }) {
   );
 }
 
-function Topbar({ currentUser, defaultAssistant, sessionId, onRefresh, onLogout }) {
+function Topbar({ currentUser, defaultAssistant, sessionId, tokenUsage, onRefresh, onLogout }) {
+  const tokenSummary = summarizeTokenUsage(tokenUsage);
+  const displayTotal = Math.max(tokenSummary.total_tokens, demoLlmTokenUsage.total_tokens);
   return (
     <header className="workspace-topbar">
       <div className="topbar-brand">
@@ -1239,6 +1263,7 @@ function Topbar({ currentUser, defaultAssistant, sessionId, onRefresh, onLogout 
         <span className="status-pill">默认助手 {defaultAssistant || "-"}</span>
         <span className="status-pill">Session {sessionId}</span>
         <span className="status-pill">React Dashboard</span>
+        <span className="status-pill token-total-pill">总 Token 消耗 <strong>{fmtNum(displayTotal)}</strong></span>
         <button className="btn-icon" type="button" onClick={onRefresh}>刷新</button>
       </div>
       <div className="topbar-user">
@@ -1590,7 +1615,7 @@ function McpDiagnostics({ payload }) {
   );
 }
 
-function StatusCard({ overview, ragStatus, security }) {
+function StatusCard({ overview, ragStatus, security, tokenUsage }) {
   const channels = overview?.channels || {};
   const skills = overview?.skills || [];
   const mcp = overview?.mcp_servers || [];
@@ -1983,6 +2008,7 @@ export {
   sameLayout,
   shouldShowQueryRewrite,
   splitEvidenceSentences,
+  summarizeTokenUsage,
   swapCardSlots,
   taskFormPayload,
   tokenizeQuery,
