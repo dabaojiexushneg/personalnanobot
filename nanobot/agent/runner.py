@@ -75,6 +75,7 @@ class AgentRunSpec:
     injection_callback: Any | None = None
 
 #   封装执行结果。
+#   slots=True启用__slots__特性，禁止实例动态添加属性，降低内存开销并提升属性访问速度
 @dataclass(slots=True)
 class AgentRunResult:
     """Outcome of a shared agent execution."""
@@ -86,9 +87,10 @@ class AgentRunResult:
     stop_reason: str = "completed"
     error: str | None = None
     tool_events: list[dict[str, str]] = field(default_factory=list)
+    #   特殊状态标记字段,标记本次执行过程中是否有外部消息注入（如用户在代理执行过程中发送新消息打断）
     had_injections: bool = False
 
-#   ReAct 执行引擎。
+#   ReAct 执行引擎,专注于实现 "思考 - 行动 - 观察" 核心逻辑
 class AgentRunner:
     """Run a tool-capable LLM loop without product-layer concerns."""
 
@@ -96,10 +98,12 @@ class AgentRunner:
         self.provider = provider
 
     @staticmethod
+    #   合并两个消息内容，同时支持纯文本和多模态块格式
     def _merge_message_content(left: Any, right: Any) -> str | list[dict[str, Any]]:
         if isinstance(left, str) and isinstance(right, str):
             return f"{left}\n\n{right}" if left else right
-
+        #   将任意输入转换为标准的多模态内容块列表
+        #   如果输入是列表，遍历每个元素，字典直接保留，其他转换为文本块
         def _to_blocks(value: Any) -> list[dict[str, Any]]:
             if isinstance(value, list):
                 return [
@@ -118,20 +122,24 @@ class AgentRunner:
         messages: list[dict[str, Any]],
         injections: list[dict[str, Any]],
     ) -> None:
-        """Append injected user messages while preserving role alternation."""
+        #   追加注入的用户消息，同时保证消息角色交替（不能连续出现两条用户消息）
         for injection in injections:
+            #   检查：消息列表非空 + 当前注入是用户消息 + 最后一条也是用户消息
             if (
                 messages
                 and injection.get("role") == "user"
                 and messages[-1].get("role") == "user"
             ):
+                # 创建最后一条消息的副本，合并两者的内容
                 merged = dict(messages[-1])
                 merged["content"] = cls._merge_message_content(
                     merged.get("content"),
                     injection.get("content"),
                 )
+                # 用合并后的消息替换原最后一条消息
                 messages[-1] = merged
                 continue
+            # 其他情况直接追加到消息列表末尾
             messages.append(injection)
 
     async def _try_drain_injections(
@@ -144,19 +152,19 @@ class AgentRunner:
         phase: str = "after error",
         iteration: int | None = None,
     ) -> tuple[bool, int]:
-        """Drain pending injections. Returns (should_continue, updated_cycles).
-
-        If injections are found and we haven't exceeded _MAX_INJECTION_CYCLES,
-        append them to *messages* (and emit a checkpoint if *assistant_message*
-        and *iteration* are both provided) and return (True, cycles+1) so the
-        caller continues the iteration loop.  Otherwise return (False, cycles).
+        """尝试排空待注入的用户消息
+        返回值：(是否应该继续执行循环, 更新后的注入次数)
+        如果找到注入消息且未超过最大注入次数，将其追加到消息列表并返回(True, 次数+1)
+        否则返回(False, 原次数)
         """
         if injection_cycles >= _MAX_INJECTION_CYCLES:
             return False, injection_cycles
+        #   调用底层方法获取待注入的消息列表
         injections = await self._drain_injections(spec)
         if not injections:
             return False, injection_cycles
         injection_cycles += 1
+        # 如果有未完成的助手消息，先追加到消息列表
         if assistant_message is not None:
             messages.append(assistant_message)
             if iteration is not None:
@@ -171,20 +179,20 @@ class AgentRunner:
                         "pending_tool_calls": [],
                     },
                 )
+        # 将注入消息追加到消息列表，保证角色交替
         self._append_injected_messages(messages, injections)
         logger.info(
             "Injected {} follow-up message(s) {} ({}/{})",
             len(injections), phase, injection_cycles, _MAX_INJECTION_CYCLES,
         )
+        # 返回继续执行循环的信号和更新后的注入次数
         return True, injection_cycles
 
     async def _drain_injections(self, spec: AgentRunSpec) -> list[dict[str, Any]]:
-        """Drain pending user messages via the injection callback.
-
-        Returns normalized user messages (capped by
-        ``_MAX_INJECTIONS_PER_TURN``), or an empty list when there is
-        nothing to inject. Messages beyond the cap are logged so they
-        are not silently lost.
+        """
+        通过注入回调获取待注入的用户消息
+        返回标准化后的用户消息列表（单轮最多返回_MAX_INJECTIONS_PER_TURN条）
+        超过限制的消息会被记录日志，不会静默丢失
         """
         if spec.injection_callback is None:
             return []

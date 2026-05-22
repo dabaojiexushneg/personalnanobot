@@ -299,6 +299,19 @@ textarea {
   color: var(--success);
 }
 
+.token-total-pill {
+  border-color: #24b26b !important;
+  background: linear-gradient(180deg, #e4fff2 0%, #c8f7df 100%) !important;
+  color: #05603a !important;
+  box-shadow: 0 0 0 1px rgba(19, 138, 91, 0.16), 0 8px 18px rgba(19, 138, 91, 0.18);
+}
+
+.token-total-pill strong {
+  color: #047a45 !important;
+  font-size: 12px;
+  font-weight: 860;
+}
+
 .status-pill.disabled,
 .status-pill.error {
   border-color: #f1beb8;

@@ -1198,11 +1198,13 @@ class AgentLoop:
             restored = dict(assistant_message)
             restored.setdefault("timestamp", datetime.now().isoformat())
             restored_messages.append(restored)
+        #   恢复已完成的工具调用结果
         for message in completed_tool_results:
             if isinstance(message, dict):
                 restored = dict(message)
                 restored.setdefault("timestamp", datetime.now().isoformat())
                 restored_messages.append(restored)
+        #   处理未完成的工具调用
         for tool_call in pending_tool_calls:
             if not isinstance(tool_call, dict):
                 continue
@@ -1217,18 +1219,21 @@ class AgentLoop:
                     "timestamp": datetime.now().isoformat(),
                 }
             )
-
+        #   去重重叠消息
         overlap = 0
+        #   计算最大可能的重叠长度max_overlap，为现有会话消息长度和待恢复消息长度的较小值
         max_overlap = min(len(session.messages), len(restored_messages))
         for size in range(max_overlap, 0, -1):
             existing = session.messages[-size:]
             restored = restored_messages[:size]
+            #   比较现有会话消息的最后size条和待恢复消息的前size条，通过_checkpoint_message_key方法生成的唯一键判断是否完全一致
             if all(
                 self._checkpoint_message_key(left) == self._checkpoint_message_key(right)
                 for left, right in zip(existing, restored)
             ):
                 overlap = size
                 break
+        #   仅将待恢复消息中重叠部分之后的内容添加到会话历史中，避免重复添加已存在的消息
         session.messages.extend(restored_messages[overlap:])
 
         self._clear_pending_user_turn(session)

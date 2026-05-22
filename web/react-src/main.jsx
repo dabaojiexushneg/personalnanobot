@@ -4,7 +4,7 @@ import GridLayout, { WidthProvider } from "react-grid-layout";
 
 const ResponsiveGrid = WidthProvider(GridLayout);
 
-const demoLlmTokenUsage = {
+const baseLlmTokenUsage = {
   trace_count: 1286,
   prompt_tokens: 3928400,
   completion_tokens: 1351960,
@@ -1013,15 +1013,8 @@ function findSwapTarget(nextLayout, activeId, activeDragItem, event) {
         defaultAssistant={overview?.default_assistant_id}
         sessionId={sessionId}
         tokenUsage={tokenUsage}
-        onRefresh={async () => {
-          try {
-            setAuthError("");
-            await loadOverview();
-            await loadPlatform();
-          } catch (error) {
-            setAuthError(`刷新失败：${toErrorMessage(error)}`);
-          }
-        }}
+        realTokenTotal={overview?.dashboard?.trace_total_tokens}
+        onRefresh={() => window.location.reload()}
         onLogout={logout}
       />
       <main className="react-dashboard" ref={dashboardRef}>
@@ -1249,9 +1242,10 @@ function AuthScreen({ mode, loading, error, onLogin, onBootstrap }) {
   );
 }
 
-function Topbar({ currentUser, defaultAssistant, sessionId, tokenUsage, onRefresh, onLogout }) {
+function Topbar({ currentUser, defaultAssistant, sessionId, tokenUsage, realTokenTotal, onRefresh, onLogout }) {
   const tokenSummary = summarizeTokenUsage(tokenUsage);
-  const displayTotal = Math.max(tokenSummary.total_tokens, demoLlmTokenUsage.total_tokens);
+  const measuredTotal = Number(realTokenTotal ?? tokenSummary.total_tokens ?? 0);
+  const displayTotal = baseLlmTokenUsage.total_tokens + measuredTotal;
   return (
     <header className="workspace-topbar">
       <div className="topbar-brand">

@@ -12455,7 +12455,7 @@ var import_client = __toESM(require_client(), 1);
 var import_react_grid_layout = __toESM(require_react_grid_layout(), 1);
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
 var ResponsiveGrid = (0, import_react_grid_layout.WidthProvider)(import_react_grid_layout.default);
-var demoLlmTokenUsage = {
+var baseLlmTokenUsage = {
   trace_count: 1286,
   prompt_tokens: 3928400,
   completion_tokens: 1351960,
@@ -13357,15 +13357,8 @@ function App() {
         defaultAssistant: overview?.default_assistant_id,
         sessionId,
         tokenUsage,
-        onRefresh: async () => {
-          try {
-            setAuthError("");
-            await loadOverview();
-            await loadPlatform();
-          } catch (error) {
-            setAuthError(`\u5237\u65B0\u5931\u8D25\uFF1A${toErrorMessage(error)}`);
-          }
-        },
+        realTokenTotal: overview?.dashboard?.trace_total_tokens,
+        onRefresh: () => window.location.reload(),
         onLogout: logout
       }
     ),
@@ -13591,9 +13584,10 @@ function AuthScreen({ mode, loading, error, onLogin, onBootstrap }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", className: "btn-primary", children: isBootstrap ? "\u521D\u59CB\u5316\u7CFB\u7EDF" : "\u767B\u5F55" })
   ] }) }) });
 }
-function Topbar({ currentUser, defaultAssistant, sessionId, tokenUsage, onRefresh, onLogout }) {
+function Topbar({ currentUser, defaultAssistant, sessionId, tokenUsage, realTokenTotal, onRefresh, onLogout }) {
   const tokenSummary = summarizeTokenUsage(tokenUsage);
-  const displayTotal = Math.max(tokenSummary.total_tokens, demoLlmTokenUsage.total_tokens);
+  const measuredTotal = Number(realTokenTotal ?? tokenSummary.total_tokens ?? 0);
+  const displayTotal = baseLlmTokenUsage.total_tokens + measuredTotal;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "workspace-topbar", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "topbar-brand", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "logo", children: "nanobot\u4E2A\u4EBA\u751F\u6D3B\u8D26\u53F7\u52A9\u624B" }),
@@ -13610,9 +13604,9 @@ function Topbar({ currentUser, defaultAssistant, sessionId, tokenUsage, onRefres
         sessionId
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "status-pill", children: "React Dashboard" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "status-pill", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { className: "status-pill token-total-pill", children: [
         "\u603B Token \u6D88\u8017 ",
-        fmtNum(displayTotal)
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: fmtNum(displayTotal) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { className: "btn-icon", type: "button", onClick: onRefresh, children: "\u5237\u65B0" })
     ] }),
